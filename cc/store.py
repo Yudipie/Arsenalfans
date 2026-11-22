@@ -124,8 +124,9 @@ def start_job(job_id: str, resumed_at: str | None) -> None:
             resumes = json.loads(c.execute("SELECT resumes FROM jobs WHERE job_id=?", (job_id,)).fetchone()[0])
             resumes.append({"step": resumed_at, "at": time.time()})
             c.execute("UPDATE jobs SET resumes=? WHERE job_id=?", (json.dumps(resumes), job_id))
-        # Reset on resume too: worker downtime after a kill doesn't count toward the time limit.
-        c.execute("UPDATE jobs SET status='running', started_at=? WHERE job_id=?", (time.time(), job_id))
+        # Keep the first start for elapsed_s; the time limit restarts from the last resume (sources.limit_hit).
+        c.execute("UPDATE jobs SET status='running', started_at=COALESCE(started_at, ?) WHERE job_id=?",
+                  (time.time(), job_id))
 
 
 def fail_job(job_id: str) -> None:
@@ -199,7 +200,9 @@ def call_started(call_key: str, provider: str, request: dict, job_id: str) -> No
         elif row["status"] == "in_flight":
             c.execute("UPDATE calls SET repeats=repeats+1, started_at=? WHERE call_key=?", (time.time(), call_key))
         else:
-            c.execute("UPDATE calls SET status='in_flight', started_at=? WHERE call_key=?", (time.time(), call_key))
+            # A re-run (after an error) is paid by this job, so it takes over the row.
+            c.execute("UPDATE calls SET status='in_flight', started_at=?, job_id=? WHERE call_key=?",
+                      (time.time(), job_id, call_key))
 
 
 def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: str = "done",

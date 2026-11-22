@@ -387,7 +387,10 @@ def _cost(provider: str, meta: dict, prices: dict) -> float:
 def limit_hit(job_id: str, provider: str, rules: dict) -> str | None:
     """Checked before each outside call. Variable-price providers count only what is already spent."""
     job = store.job(job_id)
-    if job and job["started_at"] and time.time() - job["started_at"] > rules["limits"]["time_limit_s"]:
+    # The clock runs from the last resume: worker downtime after a kill doesn't count (started_at keeps the first start).
+    resumes = json.loads(job["resumes"] or "[]") if job else []
+    clock = resumes[-1]["at"] if resumes else job and job["started_at"]
+    if clock and time.time() - clock > rules["limits"]["time_limit_s"]:
         return "over_time_limit"
     spent = sum(c["cost_inr"] * (1 + c["repeats"]) for c in store.job_calls(job_id))
     if spent + rules["prices_inr"].get(PRICE_KEYS.get(provider), 0.0) > rules["limits"]["cost_cap_inr"]:
@@ -395,8 +398,9 @@ def limit_hit(job_id: str, provider: str, rules: dict) -> str | None:
     return None
 
 
-def call_key(provider: str, request: dict) -> str:
-    return hashlib.sha256((provider + json.dumps(request, sort_keys=True)).encode()).hexdigest()
+def call_key(provider: str, request: dict, is_mock: bool = False) -> str:
+    """MOCK=1 calls get their own keys, so a live fetch never overwrites a stored mock response (or vice versa)."""
+    return hashlib.sha256((provider + json.dumps(request, sort_keys=True) + ("|mock" if is_mock else "")).encode()).hexdigest()
 
 
 def _step_delay() -> None:
@@ -417,7 +421,7 @@ def call(job_id: str, providers: list[str], request: dict, fns: dict) -> tuple[d
     {"tokens_in": i, "tokens_out": o}; _cost() turns that into rupees.
     """
     for p in providers:
-        row = store.call_row(call_key(p, request))
+        row = store.call_row(call_key(p, request, mock()))
         if row and row["status"] == "done" and (mock() or not row["mock"]):
             return row, json.loads(row["response"])
     if OFFLINE.get():
@@ -428,7 +432,7 @@ def call(job_id: str, providers: list[str], request: dict, fns: dict) -> tuple[d
         hit = limit_hit(job_id, p, rules)
         if hit:
             raise OverLimit(hit, tried)
-        key = call_key(p, request)
+        key = call_key(p, request, mock())
         tried.append(p)
         for _attempt in range(2):
             store.call_started(key, p, request, job_id)

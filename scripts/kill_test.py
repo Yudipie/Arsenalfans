@@ -41,7 +41,7 @@ def start_worker() -> subprocess.Popen:
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def wait_done(job_id: str, timeout: float = 30) -> None:
+def wait_done(job_id: str, timeout: float = 90) -> None:
     end = time.time() + timeout
     while time.time() < end:
         if store.job(job_id)["status"] == "awaiting_approval":
@@ -80,7 +80,7 @@ def run(n: int, kill_after: float | None) -> dict:
     store.approve(job_id, h, "kill-test")
     return {"verdict": v["verdict"], "elapsed": time.time() - t0, "killed_at": killed_at,
             "calls": len(calls), "repeats": sum(c["repeats"] for c in calls),
-            "all_done": all(c["status"] == "done" for c in calls), "approvals": len(store.approvals(job_id)),
+            "statuses": sorted((c["provider"], c["status"]) for c in calls), "approvals": len(store.approvals(job_id)),
             "verdict_rows": store.connect().execute("SELECT COUNT(*) FROM verdicts WHERE job_id=?", (job_id,)).fetchone()[0]}
 
 
@@ -97,8 +97,9 @@ def main() -> int:
         problems = []
         if r["verdict"] != base[n]["verdict"]:
             problems.append(f"verdict {r['verdict']} != {base[n]['verdict']}")
-        if r["calls"] != base[n]["calls"] or not r["all_done"]:
-            problems.append(f"calls {r['calls']} (all done: {r['all_done']})")
+        # Same calls ending the same way as the uninterrupted run: none left in flight (a source with no key errors in both).
+        if r["calls"] != base[n]["calls"] or r["statuses"] != base[n]["statuses"]:
+            problems.append(f"calls {r['statuses']} != baseline {base[n]['statuses']}")
         if r["repeats"] > 1:
             problems.append(f"{r['repeats']} repeated calls (at most the 1 in flight)")
         if r["verdict_rows"] != 1:

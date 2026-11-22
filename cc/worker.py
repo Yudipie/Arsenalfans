@@ -6,6 +6,7 @@ Run: `uv run python -m cc.worker` (cc/app.py starts it for you).
 import hashlib
 import json
 import os
+import sqlite3
 import time
 from urllib.parse import urlparse
 
@@ -165,8 +166,10 @@ STEP_FNS = {"intake": step_intake, "formats": step_formats, "resolve": step_reso
 
 def submit(request: dict) -> str:
     """Validate, scrub (no raw account number or Aadhaar is ever stored), then queue. Returns the job_id."""
-    clean = scrub_request(Request(**request).model_dump(exclude_none=True))
-    job_id = hashlib.sha256((clean["client_id"] + json.dumps(clean, sort_keys=True)).encode()).hexdigest()[:16]
+    raw = Request(**request).model_dump(exclude_none=True)
+    clean = scrub_request(raw)
+    # Hash the pre-scrub request: requests that differ only in masked numbers must not share a job. Only the hash is kept.
+    job_id = hashlib.sha256((clean["client_id"] + json.dumps(raw, sort_keys=True)).encode()).hexdigest()[:16]
     store.submit(job_id, clean["client_id"], clean)
     return job_id
 
@@ -232,7 +235,10 @@ def main() -> None:
         if job:
             try:
                 run_job(job["job_id"])
-            except Exception as e:  # park the job so the queue keeps moving
+            except Exception as e:
+                # Transient (database is locked or busy): crash, restart, resume. Anything else parks the job.
+                if isinstance(e, sqlite3.OperationalError) and ("locked" in str(e) or "busy" in str(e)):
+                    raise
                 store.fail_job(job["job_id"])
                 _log(event="error", job_id=job["job_id"], error=type(e).__name__)
         else:

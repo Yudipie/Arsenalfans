@@ -481,3 +481,22 @@ def test_resume_reuses_the_stored_parse_call(fresh_db, monkeypatch):
         c.execute("UPDATE jobs SET status='running' WHERE job_id=?", (job_id,))
     worker.run_job(job_id)
     assert len(calls) == 1, "the stored Haiku response is reused, never fetched again"
+
+
+@pytest.mark.parametrize("phone", ["987 654 3210", "9876 543 210", "+91 (987) 654-3210", "+91-98765-43210",
+                                   "098765 43210", "(987) 654 3210"])
+def test_scrub_masks_phone_in_any_grouping(phone):
+    t = scrub_request({**load_case(8)["request"], "text": f"call {phone} today, IFSC SBIN0030010"})["text"]
+    assert t == "call [phone] today, IFSC SBIN0030010"
+
+
+@pytest.mark.parametrize("text, want", [
+    ("id 2345-6789-0124 ok", "id [aadhaar removed] ok"),
+    ("id 234567890124 ok", "id [aadhaar removed] ok"),
+    ("A/c 5010 0123 4567 89 ok", "A/c [account ****6789] ok"),
+    ("ref 5010 0123 4567 89 ok", "ref [number ****6789] ok"),
+    ("call +919876543210 ok", "call [phone] ok"),
+    ("call 919876543210 ok", "call [phone] ok"),
+])
+def test_scrub_aadhaar_separators_and_prefixed_phones(text, want):
+    assert scrub_request({**load_case(8)["request"], "text": text})["text"] == want

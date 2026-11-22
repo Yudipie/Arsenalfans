@@ -1,0 +1,24 @@
+baseline case 2: Clear in 7.04s, 5 call(s)
+baseline case 4: Reject in 14.31s, 4 call(s)
+round  1: case 4, kill at 12.52s during awaiting_approval: Reject, 0 repeated call(s) · ok
+round  2: case 2, kill at 3.11s during gather: Clear, 1 repeated call(s) · ok
+round  3: case 4, kill at 5.22s during awaiting_approval: Reject, 0 repeated call(s) · ok
+round  4: case 2, kill at 0.82s during queued: Clear, 0 repeated call(s) · ok
+round  5: case 4, kill at 13.06s during awaiting_approval: Reject, 0 repeated call(s) · ok
+round  6: case 2, kill at 4.36s during gather: Clear, 1 repeated call(s) · ok
+round  7: case 4, kill at 4.67s during gather: Reject, 1 repeated call(s) · ok
+round  8: case 2, kill at 3.14s during queued: Clear, 0 repeated call(s) · ok
+round  9: case 4, kill at 8.15s during awaiting_approval: Reject, 0 repeated call(s) · ok
+round 10: case 2, kill at 5.61s during awaiting_approval: Clear, 0 repeated call(s) · ok
+round 11: case 4, kill at 4.90s during gather: Reject, 0 repeated call(s) · ok
+round 12: case 2, kill at 5.69s during decide: Clear, 0 repeated call(s) · ok
+round 13: case 4, kill at 2.03s during resolve: Reject, 0 repeated call(s) · ok
+round 14: case 2, kill at 1.91s during queued: Clear, 0 repeated call(s) · ok
+round 15: case 4, kill at 7.27s during awaiting_approval: Reject, 0 repeated call(s) · ok
+round 16: case 2, kill at 6.83s during awaiting_approval: Clear, 0 repeated call(s) · ok
+round 17: case 4, kill at 2.79s during gather: Reject, 0 repeated call(s) · ok
+round 18: case 2, kill at 4.48s during gather: Clear, 1 repeated call(s) · ok
+round 19: case 4, kill at 4.99s during awaiting_approval: Reject, 0 repeated call(s) · ok
+round 20: case 2, kill at 2.40s during queued: Clear, 0 repeated call(s) · ok
+
+20/20 passed

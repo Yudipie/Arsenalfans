@@ -65,6 +65,12 @@ def _current_hash(job_id: str) -> str | None:
     return output.approval_hash(v["verdict"], ids, job["bank_hash"], v["rules_hash"])
 
 
+def _rules_stale(job_id: str) -> bool:
+    """rules.yaml changed since this verdict: it can't be approved until it is decided again."""
+    v, job = store.latest_verdict(job_id), store.job(job_id)
+    return bool(v) and job["status"] == "awaiting_approval" and v["rules_hash"] != rules_hash()
+
+
 @app.get("/")
 def index():
     return FileResponse(ROOT / "web" / "index.html")
@@ -108,6 +114,7 @@ def get_job(job_id: str):
         "calls": calls,
         "verdict": v and {"checks": v["checks"], "output": v["output"], "card": v["card"]},
         "approval_hash": _current_hash(job_id),
+        "rules_stale": _rules_stale(job_id),
         "approvals": store.approvals(job_id),
         "history": store.verdicts(job_id),
         "repeated_calls": sum(c["repeats"] for c in calls),
@@ -120,6 +127,8 @@ def get_job(job_id: str):
 @app.post("/jobs/{job_id}/approve")
 def approve(job_id: str, body: Approve):
     _job_or_404(job_id)
+    if _rules_stale(job_id):
+        raise HTTPException(409, f"rules changed since this verdict; re-run needed: POST /jobs/{job_id}/redecide")
     current = _current_hash(job_id)
     if current is None or body.approval_hash != current:
         raise HTTPException(409, "the verdict or its evidence changed; reload and review again")
@@ -137,7 +146,7 @@ def edit(job_id: str, body: Edit):
     except ValueError as e:
         raise HTTPException(422, str(e))
     if not store.edit(job_id, clean):
-        raise HTTPException(409, "the job is still running or being redecided; edit it once the verdict is out")
+        raise HTTPException(409, "the job is not finished yet (queued, running or being redecided); edit it once the verdict is out")
     return {"job_id": job_id}
 
 
