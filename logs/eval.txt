@@ -1,0 +1,13 @@
+# scripts/eval.py, MOCK=1, no live keys on this machine (2026-11-22). Cases 1, 5, 9 need live Crustdata/GST: rerun with MOCK=0 on stage.
+case expected       got            result        s      ₹  notes
+1    Clear          Cannot verify  WRONG      0.71   0.00  missing facts ['gst.status', 'gst.legal_name']
+2    Clear          Clear          ok         8.19   0.00  
+3    Clear          Clear          ok         4.86   0.00  
+4    Reject         Reject         ok         0.72   0.00  
+5    Refer          Cannot verify  WRONG      0.69   0.00  missing facts ['cand.*']
+6    Refer          Refer          ok         0.74   0.00  
+7    Refer          Refer          ok         0.72   0.00  
+8    Cannot verify  Cannot verify  ok        13.70   0.00  
+9    Clear          Cannot verify  pending    0.80   0.00  missing facts ['gst.status']; not built: confirmed_gstin
+
+2 wrong verdict(s)

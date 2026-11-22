@@ -6,10 +6,10 @@
 
 ## Tasks
 
-- [ ] Run `scripts/eval.py` on all 9 cases with `MOCK=0` and save the output to `logs/eval.txt`. Fix any wrong verdict before anything else.
-- [ ] Run `scripts/kill_test.py` 20 times and save the output to `logs/kill_test.txt`.
-- [ ] Finance: take the median and worst rupees per job from the eval run and write them into the README.
-- [ ] Finish `README.md`:
+- [~] Run `scripts/eval.py` on all 9 cases with `MOCK=0` and save the output to `logs/eval.txt`. Fix any wrong verdict before anything else. (22 Nov: only a `MOCK=1` run so far, with no keys on this machine. Cases 2, 3, 4, 6, 7 and 8 match. Cases 1 and 5 need live Crustdata discovery and give Cannot verify without it. Case 9 is pending. Rerun with `MOCK=0` on stage.)
+- [x] Run `scripts/kill_test.py` 20 times and save the output to `logs/kill_test.txt`. (20/20 on 22 Nov, `MOCK=1`. The harness now compares each killed run's call outcomes with the baseline's, not "all done", so a source with no key errors in both; the wait is 90 s for slow worker start-up on Windows.)
+- [~] Finance: take the median and worst rupees per job from the eval run and write them into the README. (The README has the price table; the measured figures wait for the `MOCK=0` run, since the mock run costs ₹0.)
+- [x] Finish `README.md`:
   - the job and who pays for it today;
   - the input and the output;
   - the pass mark;
