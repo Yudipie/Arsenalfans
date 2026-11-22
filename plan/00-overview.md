@@ -16,6 +16,8 @@ Hackathon build: 2 builders (A, B), about 3 hours. Updated 22 November 2026. Rep
 | [4 Signals, cost, live fixes](phase-4-signals-cost.md) | 1:50–2:30 | c5, c6, c7 | cost, caps, redecide |
 | [5 Rehearse and demo](phase-5-rehearse-demo.md) | 2:30–3:00 | together | together |
 
+**Status (22 November 2026):** phases 0 and 1 are done. Phase 0's open items are the keys and carrier confirmation; phase 1's is a live GST run. Phases 2 and 3 are next, and can run in parallel.
+
 A phase is done only when:
 
 1. its "Done when" demo works end to end,
@@ -69,6 +71,43 @@ Before a 3PL gives a load and money to a new carrier, someone has to prove the c
   - The `fixture` provider runs only with `MOCK=1`, tags every fact it produces, and shows a MOCK banner on the page.
 - **Hindi:** we draft the sentences in `templates.yaml` and mark them `reviewed: false` until a Hindi reader checks them. The page shows an "unreviewed translation" tag until then. No translation is done by the model at run time.
 - **Follow-up asks:** drafted and shown with a copy button, never sent.
+- **Lookalikes count only in name-only discovery.** When a request has a GSTIN and GST confirms it, near-identical names elsewhere are listed on the approver card but don't give Refer. Common carrier names ("Shree Ganesh Roadlines") would otherwise turn every full-form request into Refer.
+
+**Added in phase 0:**
+
+- **Toolchain:** `uv` with Python 3.12 (`pyproject.toml`, `uv.lock`, `.python-version`). Run everything through `uv run`. The system Python is 3.9, and the Anthropic SDK needs at least 3.10.
+- **Crustdata:** API version `2025-11-01`, with `authorization: Bearer` and `x-api-version` headers.
+  - Enrich groups use the real names: `basic_info`, `revenue`, `people`, `news`, `web_traffic`, `hiring`. There's no `basic` or `activity` group, and an unknown group returns a 400. c5's "activity" means `web_traffic`, `hiring` and `news`.
+  - Cost per call comes from the `X-Credits-Used` response header, not an estimate.
+  - Whether each rung (identify, enrich, web_search, web_fetch, person_search) is on is set by hand in `rules.yaml` from `GET /account/endpoints`, and a test checks the two agree. Nothing rewrites the YAML automatically.
+- **GST:** no key yet, so `MOCK=1` and `providers.gst: [fixture]`. The fixtures are a dict in `cc/sources.py`, shaped like Cashfree's `POST /verification/gstin` response: its documented sample, plus cases 2 and 4. When a key works, set `providers.gst: [cashfree, …]` and `MOCK=0`.
+- **`account_hash`** is `sha256` of the account number's digits only (`cc/intake.py`).
+- **Probes** are `python -m cc.crustdata` and `python -m cc.sources`. Their raw output goes to `logs/probe_*.json`, which is gitignored.
+- **Phase-0 tests** live in `tests/test_intake.py` (formats, vendor master, case files) and `tests/test_decide.py` (rules, MOCK, gates). The `test_phase0_gate_*` tests stay red until keys are added and the carriers are confirmed.
+- **Case files** (`tests/cases/case_0N.json`) carry `status: unconfirmed` until someone checks the carrier on gst.gov.in or with a live lookup.
+
+**Added in phase 1:**
+
+- **Checks not built yet** return `cannot_verify` with `rule_id: not_built`. `scripts/eval.py` counts a case that depends on one as *pending*, not wrong. Until phase 2 adds c3, c4 and c9, case 2 gives Cannot verify, with c1 and c2 passing.
+- **Scrub at the door.** Before a request is stored, `intake.scrub_request()` replaces the account number with its hash and last 4 digits, and removes Aadhaar-shaped numbers from pasted text. This was moved up from phase 3 because case 8 would otherwise put an Aadhaar into SQLite. Phase 3 adds the rest of the masking.
+- **Call rows bracket the request.** A row is written as `in_flight` before the request goes out and is finished after it.
+  - A row still `in_flight` at the next try means the worker was killed mid-call, and adds 1 to `repeats`. That's the page's "N paid calls repeated" figure.
+  - A retry inside the same run isn't a repeat. Job cost is `cost × (1 + repeats)`.
+- **Decision edges:**
+  - A `fail` whose rule isn't in `hard_fails` gives Refer, so `hard_fails` stays the only list that leads to Reject.
+  - A GSTIN with a valid checksum that GST doesn't know gives c2 `gst_not_found`, which is Cannot verify (ask the vendor), not Reject.
+  - A GST status other than active, cancelled or suspended gives Refer (`gst_status_other`).
+- **Approval:**
+  - The hash uses the rules hash stored with the verdict.
+  - `POST /approve` recomputes the hash from what's stored and returns 409 if it differs.
+  - Evidence ids use `AUTOINCREMENT`. A rerun always gets new ids, so any edit changes the hash.
+- **Edit reruns from intake**, not from formats. Intake is code only, and the edited field has to reach the record. Stored calls are kept, so an unchanged GSTIN isn't fetched again.
+- **Sample requests** for the page come from `tests/cases/` through `GET /samples`, so `data/requests/` isn't created and the samples have one source.
+- **`job_id`** is the first 16 hex characters of `sha256(client_id + scrubbed request)`. Sending the same request again returns the same job.
+- **Test hooks:**
+  - `CC_DB` sets the database path (the default is `logs/cc.sqlite`). Eval and the kill test give each run a new file.
+  - `CC_STEP_DELAY` adds simulated latency per step and per call, so kills land mid-job.
+- **The approver card has no sentences yet.** It shows structured fields and `rule_id`s; the sentences come from `templates.yaml` in phase 3. There are no Verdict or Approval pydantic models: `serialize()` builds the verdict and approvals are plain rows. The verdict row is written in the output step.
 
 ## 4. Architecture
 
@@ -105,9 +144,9 @@ each step checkpoints to SQLite (WAL) ◄── read by the web app (app.py); th
 |---|---|---|---|---|
 | c1 | Identity format | yes | code only | GSTIN length, check digit, state code, embedded PAN and PAN holder type; IFSC format; PAN given must equal the PAN inside the GSTIN. An O typed for a 0 is noted and never fixed. A failure gives Cannot verify, with no paid call. |
 | c2 | Exists and status | yes | GST API | Active passes. Cancelled or suspended gives Reject, citing the status field and its date. |
-| c3 | Who is this | yes | GST legal and trade names, Crustdata Identify | One GST-confirmed identity passes. A tie, several PANs, or a near-identical name with other details gives Refer. |
+| c3 | Who is this | yes | GST legal and trade names, Crustdata Identify | One GST-confirmed identity passes. A tie or several PANs gives Refer. In name-only discovery, a near-identical name with other details also gives Refer; on a GST-confirmed full request it's only listed. |
 | c4 | Duplicate | yes | `vendor_master.csv`, earlier jobs | Same GSTIN or PAN under another name gives Refer. Same PAN in another state is a branch and passes. Same GSTIN with a new bank account gives Refer. |
-| c5 | Active | no | Crustdata Enrich (activity), Web Fetch (is the site live) | Dormant gives Refer. |
+| c5 | Active | no | Crustdata Enrich (`web_traffic`, `hiring`, `news`), Web Fetch (is the site live) | Dormant gives Refer. |
 | c6 | Age and address | no | GST registration date and address, RDAP | Registered less than `min_age_months` ago gives Refer. GST state different from the stated state gives Refer. |
 | c7 | People and news | no | Crustdata people and Person Search, Web Search, OpenSanctions | 2 or more anchors give Refer. 1 anchor is a gap. 0 anchors means nothing is stored about that person. |
 | c8 | Contact is real | cut | | |
@@ -124,7 +163,7 @@ each step checkpoints to SQLite (WAL) ◄── read by the web app (app.py); th
 
 All values below are made up.
 
-**Request** (`data/requests/*.json`, the format we define):
+**Request** (the `request` object in `tests/cases/*.json`, the format we define):
 
 ```json
 {
@@ -213,7 +252,7 @@ Logs are JSON lines written to `logs/`, and they are masked too.
 ├── templates.yaml
 ├── data/
 │   ├── vendor_master.csv
-│   └── requests/            sample requests for the page and the rehearsal set
+│   (sample requests: the page reads tests/cases/ via GET /samples)
 ├── cc/
 │   ├── core.py
 │   ├── store.py
@@ -238,6 +277,7 @@ Logs are JSON lines written to `logs/`, and they are masked too.
 
 | File | What it does | Phase |
 |---|---|---|
+| `pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore` | Toolchain (not app code): uv, Python 3.12, and keeping `.env`, `logs/` and the database out of git | 0 |
 | `rules.yaml` | Providers and fallback order, required checks, hard fails, thresholds (fuzzy cut-off, anchors, `min_age_months`), prices, cost cap, time limit, which rungs are on | 1 |
 | `templates.yaml` | One sentence per `rule_id` in English and Hindi, with field placeholders only; `reviewed` flag on the Hindi | 3 |
 | `cc/core.py` | Pydantic models for the contracts above; loads `rules.yaml`, `templates.yaml` and `.env`; computes the rules hash | 1 |
@@ -262,7 +302,7 @@ Logs are JSON lines written to `logs/`, and they are masked too.
 providers:
   gst: [cashfree, surepass]      # tried in order, one fallback; add "fixture" only with MOCK=1
   ifsc: [razorpay_ifsc]          # the free public IFSC lookup, not Razorpay payments
-  crustdata: { enabled: true, enrich_groups: [basic, revenue, activity, people] }
+  crustdata: { enabled: true, api_version: "2025-11-01", enrich_groups: [basic_info, revenue, people, news, web_traffic, hiring], rungs: { identify: true, enrich: true, web_search: true, web_fetch: true, person_search: true } }
   sanctions: { enabled: true }
 required_checks: [c1, c2, c3, c4, c9]
 hard_fails: [gst_cancelled, gst_suspended, struck_off]
@@ -289,6 +329,20 @@ There is no hidden test set, so this set stands in for it. Pick real carriers in
 | 9 | A director with a very common name | No flag from the namesake | E26 | 4 |
 
 Each case file holds the request, the expected verdict, the facts that must appear with their sources, and nothing else.
+
+Phase-0 candidates, all unconfirmed:
+
+| # | Carrier |
+|---|---|
+| 1 | VRL Logistics |
+| 2 | Rajesh Roadlines Pvt Ltd, 27AAACR2504F1ZU |
+| 3 | Ashirwad Roadways, Indore, 23AKHPK8071C1ZE |
+| 4 | Shree Shyam Roadlines, 09AJOPN5622Q1ZC, cancelled 2019 |
+| 5 | Shree Ganesh Roadlines, Mumbai (two PANs) |
+| 6 | Case 2 as "RRL Transport Services" |
+| 7 | Case 2 with a new bank account |
+| 8 | Case 3, Hinglish |
+| 9 | Rajasthan Logistics Pvt Ltd (director Rajesh Kumar, DIN 03521433) |
 
 ## 6. Cut from the 7-hour plan
 

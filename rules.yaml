@@ -1,0 +1,41 @@
+# Carrier Clearance rules. Everything tunable lives here; code reads it fresh per job.
+
+providers:
+  # Tried in order, one fallback. "fixture" is allowed only with MOCK=1 (no GST key yet).
+  gst: [fixture]
+  ifsc: [razorpay_ifsc]            # the free public IFSC lookup, not Razorpay payments
+  crustdata:
+    enabled: true
+    api_version: "2025-11-01"
+    # Real Enrich group names (docs.crustdata.com). c5 "activity" = web_traffic + hiring + news.
+    enrich_groups: [basic_info, revenue, people, news, web_traffic, hiring]
+    # Set by hand from logs/probe_crustdata_endpoints.json (python -m cc.crustdata).
+    # A test checks these against the probe. Unknown until the probe runs.
+    rungs:
+      identify: true
+      enrich: true
+      web_search: true
+      web_fetch: true
+      person_search: true
+  sanctions: { enabled: true }
+
+required_checks: [c1, c2, c3, c4, c9]
+hard_fails: [gst_cancelled, gst_suspended, struck_off]
+
+thresholds:
+  fuzzy_cutoff: 0.9
+  anchors_to_refer: 2
+  min_age_months: 6
+  max_candidates: 5
+
+prices_inr:
+  cashfree_gstin: 1.00             # TODO price: confirm from the provider's price list
+  crustdata_credit: 0.0            # TODO price: rupees per credit from the Crustdata plan
+  haiku_in_per_mtok: 8.50          # $0.10 / MTok at ~₹85/$ (prompts under 100K tokens)
+  haiku_out_per_mtok: 42.50        # $0.50 / MTok at ~₹85/$
+
+limits:
+  cost_cap_inr: 25
+  time_limit_s: 90
+
+default_language: en

@@ -1,0 +1,28 @@
+{
+  "case": 7,
+  "title": "Case 2 resubmitted with a different bank account",
+  "expected": "Refer",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "Rajesh Roadlines Pvt Ltd",
+      "gstin": "27AAACR2504F1ZU",
+      "pan": "AAACR2504F",
+      "state": "Maharashtra",
+      "city": "Mumbai",
+      "ifsc": "HDFC0000053",
+      "account_number": "50100098765432",
+      "payee_name": "Rajesh Roadlines Pvt Ltd",
+      "directors": [],
+      "contact_email": "ops@example.in"
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "vendor_master.V011"
+  ],
+  "derived_from": 2,
+  "evidence_note": "Same GSTIN, new bank hash; cites the earlier job (run case 2 first) and V011.",
+  "status": "unconfirmed"
+}

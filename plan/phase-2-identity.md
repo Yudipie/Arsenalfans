@@ -7,7 +7,7 @@
 ## Tasks
 
 - [ ] `cc/crustdata.py`:
-  - Identify, Enrich (`basic` and `revenue` groups only, for now), Web Search (`location: IN`) and Web Fetch.
+  - Identify, Enrich (`basic_info` and `revenue` groups only, for now), Web Search (`location: IN`) and Web Fetch.
   - Every call goes through `sources.call()`.
   - A 403 switches that rung off for the job, and the check records Cannot verify with the source named.
 - [ ] `cc/resolve.py`:
@@ -20,7 +20,7 @@
     - If the GST provider can search by name or PAN, use that as the first rung.
   - **Name normalisation:** drop "M/s", treat "Pvt Ltd" as "Private Limited", "&" as "and", ignore case and punctuation. Identity is confirmed through GST, never by name alone.
   - **Matching:** against the GST legal name or trade name with `fuzzy_cutoff`. When the PAN's fourth letter is `P` (a proprietorship), match on the trade name and treat the owner's legal name as personal data.
-  - **Lookalikes:** Crustdata or search hits with near-identical names but different GSTIN, PAN or city become candidates for c3.
+  - **Lookalikes:** Crustdata or search hits with near-identical names but different GSTIN, PAN or city become candidates for c3. They give Refer only in name-only discovery. On a full request whose GSTIN is GST-confirmed, they're listed on the approver card and nothing more (overview §3).
 - [ ] `cc/sources.py`: IFSC lookup through the free public IFSC API, which returns bank and branch.
 - [ ] `cc/checks.py`:
   - **c3:** one GST-confirmed identity passes. A tie or several PANs give Refer, listing both candidates and their sources. `revenue.acquisition_status` showing acquired or merged gives Refer.

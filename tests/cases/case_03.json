@@ -1,0 +1,28 @@
+{
+  "case": 3,
+  "title": "Proprietorship, trade name differs from owner's name",
+  "expected": "Clear",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "Ashirwad Roadways",
+      "gstin": "23AKHPK8071C1ZE",
+      "pan": "AKHPK8071C",
+      "state": "Madhya Pradesh",
+      "city": "Indore",
+      "ifsc": "SBIN0030010",
+      "account_number": "38112233445",
+      "payee_name": "Ashirwad Roadways",
+      "directors": []
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "gst.status",
+    "gst.trade_name"
+  ],
+  "derived_from": null,
+  "evidence_note": "Proprietorship (PAN 4th letter P), Loha Mandi, Indore, registered 2017-07-01 (knowyourgst.com). Owner's legal name to be read from a live GST lookup. Bank details made up.",
+  "status": "unconfirmed"
+}

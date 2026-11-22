@@ -1,0 +1,21 @@
+{
+  "case": 5,
+  "title": "Lookalike pair: same name, two PANs, same city",
+  "expected": "Refer",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "Shree Ganesh Roadlines",
+      "state": "Maharashtra",
+      "city": "Mumbai"
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "gst.legal_name"
+  ],
+  "derived_from": null,
+  "evidence_note": "Two unrelated Mumbai proprietorships: 27AXEPG3338E1ZR (Sewree) and 27AOHPP0337G1Z0 (Ghatkopar), per knowyourgst.com / justdial. Discovery should find both PANs.",
+  "status": "unconfirmed"
+}

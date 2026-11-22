@@ -6,13 +6,13 @@
 
 ## A: c5, c6, c7
 
-- [ ] `cc/crustdata.py`: add the Enrich `activity` and `people` groups, and Person Search.
+- [ ] `cc/crustdata.py`: add the Enrich `web_traffic`, `hiring`, `news` and `people` groups, and Person Search.
 - [ ] `cc/sources.py`, each adding only a few lines:
   - OpenSanctions lookup.
   - RDAP lookup of the domain's registration date.
   - MCA company master data from data.gov.in, for struck-off status. Optional: skip it if there's no key by 2:00.
 - [ ] `cc/checks.py`:
-  - **c5 Active:** Enrich activity, plus Web Fetch to see whether the site is live. Dormant gives Refer. No data is a gap.
+  - **c5 Active:** Enrich `web_traffic`, `hiring` and `news`, plus Web Fetch to see whether the site is live. Dormant gives Refer. No data is a gap.
   - **c6 Age and address:**
     - GST registered less than `min_age_months` ago gives Refer.
     - GST state different from the stated state (the full form of E4) gives Refer.

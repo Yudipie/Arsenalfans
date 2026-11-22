@@ -1,0 +1,30 @@
+{
+  "case": 2,
+  "title": "Mid-size private limited carrier, full form",
+  "expected": "Clear",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "Rajesh Roadlines Pvt Ltd",
+      "gstin": "27AAACR2504F1ZU",
+      "pan": "AAACR2504F",
+      "state": "Maharashtra",
+      "city": "Mumbai",
+      "ifsc": "HDFC0000053",
+      "account_number": "50100012345678",
+      "payee_name": "Rajesh Roadlines Pvt Ltd",
+      "directors": [],
+      "contact_email": "ops@example.in"
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "gst.status",
+    "gst.legal_name",
+    "ifsc.bank"
+  ],
+  "derived_from": null,
+  "evidence_note": "27AAACR2504F1ZU Active since 2017-07-01, Mumbai (mastersindia.co). Bank details made up. In vendor_master.csv as V011.",
+  "status": "unconfirmed"
+}

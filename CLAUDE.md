@@ -97,7 +97,7 @@ An agent that checks a new carrier (truck operator) for an Indian 3PL. It takes 
 - **Files:** keep to the list in overview §4.6 (`cc/` has 10 modules). Put new code into an existing module before creating a new file.
 - **Keys:** in `.env`, with `.env.example` as the template. Never commit `.env` or print keys.
 
-### Commands (once they exist)
+### Commands (once they exist; run through `uv run`, Python 3.12 from `.python-version`)
 
 - `uvicorn cc.app:app --reload`: the web app; it starts the worker subprocess.
 - `pytest tests/`: unit tests.

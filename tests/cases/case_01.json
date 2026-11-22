@@ -1,0 +1,20 @@
+{
+  "case": 1,
+  "title": "Large listed logistics company, name only",
+  "expected": "Clear",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "name_only",
+    "fields": {
+      "name": "VRL Logistics Limited"
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "gst.status",
+    "gst.legal_name"
+  ],
+  "derived_from": null,
+  "evidence_note": "PAN AABCV3609C, ~35 GSTINs; main 29AABCV3609C1ZJ Active (mastersindia.co, knowyourgst.com). Note 29AABCV3609C2ZI is cancelled: decide at PAN level, list others.",
+  "status": "unconfirmed"
+}

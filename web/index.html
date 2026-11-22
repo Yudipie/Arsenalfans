@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Carrier Clearance</title>
+<style>
+  :root { --ok:#1a7f37; --bad:#cf222e; --warn:#9a6700; --muted:#6e7781; --line:#d0d7de; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 system-ui, sans-serif; margin: 0; color: #1f2328; }
+  #mock { display:none; background:#fff8c5; border-bottom:1px solid #d4a72c; padding:6px 16px; font-weight:600; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--line); display:flex; gap:8px; align-items:flex-start; }
+  header textarea { flex:1; height: 88px; font: 12px ui-monospace, monospace; }
+  main { display:grid; grid-template-columns: 1fr 1.4fr 1.2fr; gap: 0; min-height: calc(100vh - 220px); }
+  section { padding: 12px 16px; border-right: 1px solid var(--line); overflow:auto; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  .row { padding: 4px 6px; border-radius: 4px; margin-bottom: 2px; }
+  .pass { color: var(--ok); } .fail { color: var(--bad); } .refer { color: var(--warn); } .cannot_verify { color: var(--muted); }
+  .step.done::before { content: "● "; color: var(--ok); } .step.todo::before { content: "○ "; color: var(--muted); }
+  .step.now { font-weight: 600; }
+  .fact { cursor: pointer; } .fact:hover, .fact.sel { background: #ddf4ff; }
+  pre { font: 12px/1.4 ui-monospace, monospace; background:#f6f8fa; padding:8px; border-radius:6px; overflow:auto; }
+  .hl { background: #fff8c5; outline: 1px solid #d4a72c; }
+  #verdict { font-size: 28px; font-weight: 700; margin: 4px 0 8px; }
+  .Clear { color: var(--ok); } .Reject { color: var(--bad); } .Refer { color: var(--warn); } .Cannot { color: var(--muted); }
+  footer { border-top: 1px solid var(--line); padding: 8px 16px; display:flex; gap: 12px; align-items:center; background:#f6f8fa; }
+  .muted { color: var(--muted); } code { font-size: 12px; }
+  button { cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="mock">MOCK=1: GST answers come from fixtures. Facts are tagged mock; this is not a live verdict.</div>
+<header>
+  <select id="samples"><option value="">Sample request…</option></select>
+  <textarea id="req" placeholder='{"client_id": "demo-3pl", "received_via": "form", "fields": {"name": "…", "gstin": "…"}}'></textarea>
+  <button id="submit">Check carrier</button>
+</header>
+<main>
+  <section>
+    <h2>Steps</h2><div id="steps"></div>
+    <h2 style="margin-top:12px">Checks</h2><div id="checks" class="muted">No job yet.</div>
+  </section>
+  <section>
+    <h2>Evidence</h2><div id="facts" class="muted">Facts appear here; click one to see its source.</div>
+    <div id="source"></div>
+  </section>
+  <section>
+    <h2>Verdict</h2><div id="verdict" class="muted">–</div>
+    <div id="card"></div>
+    <div id="approve-box" style="margin-top:10px"></div>
+    <div style="margin-top:12px">
+      <h2>Edit a field</h2>
+      <input id="ef" placeholder="field (e.g. account_number)" size="22">
+      <input id="ev" placeholder="new value" size="18">
+      <button id="edit">Edit and rerun</button>
+    </div>
+  </section>
+</main>
+<footer>
+  <span>Worker: <b id="wstat">?</b></span>
+  <button id="kill">kill -9 worker</button>
+  <button id="restart">Restart worker</button>
+  <span id="resume" class="muted"></span>
+  <span id="cost" class="muted" style="margin-left:auto"></span>
+</footer>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let jobId = new URLSearchParams(location.search).get("job");
+let selected = null, last = null;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : r.status);
+  return data;
+}
+
+// Render JSON with each leaf tagged by its dotted path, so the deciding field can be highlighted.
+function renderJSON(v, path, hl, indent = "") {
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const inner = indent + "  ";
+    const items = Object.entries(v).map(([k, x]) => {
+      const p = path ? path + "." + k : k;
+      const line = `${inner}"${esc(k)}": ${renderJSON(x, p, hl, inner)}`;
+      return p === hl ? `<span class="hl">${line}</span>` : line;
+    });
+    return "{\n" + items.join(",\n") + "\n" + indent + "}";
+  }
+  return esc(JSON.stringify(v));
+}
+
+function showSource(fact) {
+  selected = fact.evidence_id;
+  const call = last.calls.find(c => c.call_id === fact.call_id);
+  $("source").innerHTML = call ? `
+    <p class="muted">${esc(call.provider)} · retrieved ${esc(fact.retrieved_at)} · record updated ${esc(fact.record_updated_at ?? "not given")} · ₹${call.cost_inr}${fact.mock ? " · <b>mock</b>" : ""}</p>
+    <pre>${renderJSON(call.response, "", fact.field_path)}</pre>` : "";
+  render(last);
+}
+
+function render(j) {
+  last = j;
+  $("mock").style.display = j.mock ? "block" : "none";
+  $("steps").innerHTML = j.steps.map(s =>
+    `<div class="step ${s.done ? "done" : "todo"} ${j.current_step === s.name ? "now" : ""}">${s.name}${j.current_step === s.name ? " …" : ""}</div>`).join("");
+  const checks = j.verdict ? j.verdict.checks : [];
+  $("checks").innerHTML = checks.length ? checks.map(c =>
+    `<div class="row ${c.result}"><b>${c.check}</b> ${c.result} <code>${esc(c.rule_id)}</code>${c.gap ? `<div class="muted">${esc(c.gap)}</div>` : ""}</div>`).join("")
+    : `<span class="muted">${esc(j.status)}</span>`;
+  $("facts").innerHTML = j.evidence.length ? j.evidence.map(e =>
+    `<div class="row fact ${selected === e.evidence_id ? "sel" : ""}" data-id="${e.evidence_id}"><code>${esc(e.fact_id)}</code> = <b>${esc(e.value)}</b> <span class="muted">(${esc(e.source)} · ${esc(e.field_path)})</span></div>`).join("")
+    : `<span class="muted">No facts yet.</span>`;
+  document.querySelectorAll(".fact").forEach(el => el.onclick = () => showSource(j.evidence.find(e => e.evidence_id == el.dataset.id)));
+
+  const out = j.verdict && j.verdict.output;
+  $("verdict").className = out ? out.verdict.split(" ")[0] : "muted";
+  $("verdict").textContent = out ? out.verdict : (j.status === "queued" || j.status === "running" ? "working…" : "–");
+  if (out) {
+    const card = j.verdict.card;
+    $("card").innerHTML = `
+      <div><b>${esc(card.carrier ?? "(no name)")}</b> · <code>${esc(card.gstin ?? "no GSTIN")}</code> · PAN holder: ${esc(card.pan_holder_type ?? "?")}</div>
+      <div class="muted">Bank: IFSC ${esc(card.bank.ifsc ?? "–")} · account …${esc(card.bank.account_last4 ?? "–")} · holder not checked</div>
+      ${card.reasons.length ? "<h2 style='margin-top:10px'>Reasons</h2>" + card.reasons.map(r =>
+        `<div class="row"><b>${r.check}</b> <code>${esc(r.rule_id)}</code> ${r.facts.map(f => `· ${esc(f.fact_id)} = ${esc(f.value)}`).join(" ")}</div>`).join("") : ""}
+      ${card.gaps.length ? "<h2 style='margin-top:10px'>Gaps</h2>" + card.gaps.map(g =>
+        `<div class="row muted"><b>${g.check}</b> ${esc(g.missing)}${g.sources_tried.length ? " · tried " + esc(g.sources_tried.join(", ")) : ""}</div>`).join("") : ""}
+      ${card.notes.length ? "<h2 style='margin-top:10px'>Notes</h2>" + card.notes.map(n => `<div class="row">${esc(n)}</div>`).join("") : ""}`;
+  } else $("card").innerHTML = "";
+
+  const live = j.approvals.filter(a => !a.void), voided = j.approvals.filter(a => a.void);
+  $("approve-box").innerHTML = (j.approval_hash ? `
+      <div class="muted">Approval hash <code>${j.approval_hash.slice(0, 16)}…</code></div>
+      <button id="approve">Approve this verdict</button>` : "") +
+    (live.length ? `<div class="pass">Approved by ${esc(live[0].approved_by)} (${live.length} row)</div>` : "") +
+    (voided.length ? `<div class="muted">${voided.length} earlier approval(s) void after an edit</div>` : "");
+  if ($("approve")) $("approve").onclick = () => api(`/jobs/${jobId}/approve`, {approval_hash: j.approval_hash}).catch(e => alert(e.message));
+
+  const r = j.resumes.at(-1);
+  $("resume").textContent = r ? `resumed at ${r.step ?? "end"} · ${j.repeated_calls} paid calls repeated · ₹${j.respent_inr} re-spent` : "";
+  $("cost").textContent = `job ${j.job_id} · ₹${j.cost_inr}${out ? " · " + out.elapsed_s + " s" : ""}`;
+}
+
+async function poll() {
+  try {
+    const w = await api("/worker");
+    $("wstat").textContent = w.alive ? `running (pid ${w.pid})` : "stopped";
+    $("mock").style.display = w.mock ? "block" : "none";
+    if (jobId) render(await api(`/jobs/${jobId}`));
+  } catch (e) { console.error(e); }
+  setTimeout(poll, 500);
+}
+
+$("submit").onclick = async () => {
+  try {
+    const {job_id} = await api("/jobs", JSON.parse($("req").value));
+    jobId = job_id; selected = null; $("source").innerHTML = "";
+    history.replaceState(null, "", `?job=${job_id}`);
+  } catch (e) { alert(e.message); }
+};
+$("edit").onclick = () => api(`/jobs/${jobId}/edit`, {field: $("ef").value, value: $("ev").value || null}).catch(e => alert(e.message));
+$("kill").onclick = () => api("/worker/kill", {});
+$("restart").onclick = () => api("/worker/restart", {});
+
+api("/samples").then(list => {
+  list.forEach((s, i) => $("samples").add(new Option(s.label, i)));
+  $("samples").onchange = e => { if (e.target.value !== "") $("req").value = JSON.stringify(list[e.target.value].request, null, 2); };
+});
+poll();
+</script>
+</body>
+</html>

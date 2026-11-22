@@ -1,0 +1,27 @@
+{
+  "case": 9,
+  "title": "Director with a very common name",
+  "expected": "Clear",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "Rajasthan Logistics Private Limited",
+      "state": "Rajasthan",
+      "city": "Jaipur",
+      "directors": [
+        {
+          "name": "Rajesh Kumar",
+          "din": "03521433"
+        }
+      ]
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "gst.status"
+  ],
+  "derived_from": null,
+  "evidence_note": "CIN U60200RJ2011PTC035171, directors incl. Rajesh Kumar DIN 03521433 (tofler.in, zaubacorp.com). GSTIN not found yet: discovery, or confirm by hand. Namesakes must raise no flag.",
+  "status": "unconfirmed"
+}

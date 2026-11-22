@@ -1,0 +1,28 @@
+{
+  "case": 6,
+  "title": "Case 2 under a second name, already in the vendor master",
+  "expected": "Refer",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "RRL Transport Services",
+      "gstin": "27AAACR2504F1ZU",
+      "pan": "AAACR2504F",
+      "state": "Maharashtra",
+      "city": "Mumbai",
+      "ifsc": "HDFC0000053",
+      "account_number": "50100012345678",
+      "payee_name": "RRL Transport Services",
+      "directors": [],
+      "contact_email": "ops@example.in"
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "vendor_master.V011"
+  ],
+  "derived_from": 2,
+  "evidence_note": "Same GSTIN as V011 under a different name.",
+  "status": "unconfirmed"
+}

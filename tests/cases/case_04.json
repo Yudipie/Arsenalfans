@@ -1,0 +1,22 @@
+{
+  "case": 4,
+  "title": "Cancelled GSTIN",
+  "expected": "Reject",
+  "request": {
+    "client_id": "demo-3pl",
+    "received_via": "form",
+    "fields": {
+      "name": "Shree Shyam Roadlines",
+      "gstin": "09AJOPN5622Q1ZC",
+      "state": "Uttar Pradesh",
+      "city": "Kanpur"
+    },
+    "text": null
+  },
+  "expect_facts": [
+    "gst.status"
+  ],
+  "derived_from": null,
+  "evidence_note": "Cancelled suo-moto on 2019-12-03 per my.gstzen.in. Needs a live GST lookup to confirm the status is still cancelled.",
+  "status": "unconfirmed"
+}
