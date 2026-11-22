@@ -1,5 +1,7 @@
 # Carrier Clearance: build plan
 
+> **Superseded (22 November 2026)** by [plan/00-overview.md](plan/00-overview.md) and the phase files in `plan/`. Use this file for background only.
+
 ContextCon 05 · Trust and compliance, joined with Infrastructure for agents · client: a mid-size Indian 3PL
 Companion to `docs/architecture.html` (the Carrier Clearance pipeline page). Updated 22 November 2026.
 
