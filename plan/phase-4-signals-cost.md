@@ -72,7 +72,7 @@
   - elapsed time since `jobs.started_at` over `time_limit_s` gives `over_time_limit`;
   - spend so far plus the provider's fixed price over `cost_cap_inr` gives `over_cost_cap`.
   - Variable-price providers (Crustdata, Haiku) have no price until the response arrives, so for them only spend so far counts.
-- The old `worker._over_limits()` stub is removed.
+- The old `worker._over_limits()` stub is gone. After the merge with 4-A, `_over_limits()` is back only as a thin wrapper over `limit_hit()` for resolve's callbacks (see "Merge" below).
 - Card wording for both limits is in `templates.yaml` (`over_cost_cap`, `over_time_limit`).
 
 ### Redecide
@@ -141,7 +141,7 @@ Run only B's half with `uv run pytest -m phase4b -v` (12 tests, tagged `@pytest.
 - **c7 counts anchors at gather time, the threshold at check time,** so `anchors_to_refer` changes work on redecide.
 - New `rules.yaml` keys: `thresholds.activity_months`, `stale_after_months`, `news_months`; `signals.adverse_terms`, `signals.roles`.
 
-**New rule_ids for B's `templates.yaml`:**
+**New rule_ids for B's `templates.yaml`** (done at the merge, see below):
 - c5: `active`, `dormant`, `no_recent_activity`, `no_activity_data`
 - c6: `age_address_ok`, `gst_too_new`, `state_mismatch`, `domain_too_new`, `gst_date_missing`
 - c7: `people_not_given`, `people_clear`, `people_one_anchor`, `people_adverse`
@@ -151,3 +151,37 @@ Run only B's half with `uv run pytest -m phase4b -v` (12 tests, tagged `@pytest.
 - **Case 9 GSTIN not findable by discovery.** One live search (1 credit, saved to `logs/probe_crustdata_websearch_case9.json`) for "Rajasthan Logistics Private Limited GST number" returned 10 results: GSTINs of other firms (e.g. Punjab Rajasthan Logistics, 05BIMPP8051P2ZH) and no `08AAFCR1929K…`. So live, case 9 ends Cannot verify (`discovery_none`), which is the honest answer, and c7 never runs because gather needs a GSTIN. No GSTIN was guessed or seeded. Case 9 now `needs: [c7, confirmed_gstin]` and stays pending in eval until the GSTIN is confirmed (GST portal search by PAN AAFCR1929K) and added to its request. c7's namesake behaviour is covered offline by `test_c7_namesake_raises_nothing_and_nothing_is_stored`.
 - Live eval and kill test not rerun for 4A (they spend credits). The kill test should switch Crustdata off for its worker first (phase-2 open item).
 - Case 2's site rajeshrpl.in answered 200 when checked by hand, so c5 should pass live.
+
+## Merge: phase 2 and 4-A with phase 3 and 4-B (22 November 2026)
+
+`phase-3-and-4b` was merged into `main` (which held phase 2 and 4-A) in `8d13ce4`, with follow-up fixes in `1499ae6` and `1e69f24`. It's pushed as the `auto-review` branch.
+
+**State:** `pytest` gives 147 passed, 6 failed, 1 skipped. The 6 failures also fail on both branches before the merge: the 5 phase-0 gates (live keys and probe logs) and `test_fixture_provider_only_with_mock` (needs `MOCK=0` setup). Eval and the kill test are not rerun after the merge.
+
+**How the conflicts were settled:**
+- **Masking:** B's `mask_text()` (Verhoeff, account prefix, address, director names) replaces the phase 1 regexes in `intake.py`. Phase 1's `[phone masked]` and `[account masked]` tags are gone; the tags are now those in phase 3's masking list.
+- **Edit vs redecide:** `store.edit()` keeps A's rule, only a finished job (`awaiting_approval` or `error`) can be edited. That rule also refuses an edit while a job is `redeciding`, so B's separate "not while redeciding" check isn't needed. `claim_redecide()` and `release_redecide()` come from B unchanged. The 409 message says "still running or being redecided".
+- **Pricing in `call()`:** B's `_cost(provider, meta, prices)` prices every call. A's Crustdata providers still return `{"body", "credits"}` rather than `(resp, meta)`, so `call()` copies `credits` from such a response into `meta` before pricing. The stored response keeps its `body`, which A's code reads. A's "reuse a stored mock response only with `MOCK=1`" guard is kept.
+- **Limits:** B's `OverLimit` in `call()` is the one enforcement point. A's `resolve` takes an `over()` callback before multi-call stages (discovery, director screening), so `worker._over_limits(job, rules)` now calls `sources.limit_hit(job_id, "", rules)` and returns `over cost cap` or `over time limit`. With no provider, only what is already spent counts. `step_gather` drops A's up-front limit check and catches `OverLimit` on the GST lookup instead, setting `limit_rule`.
+- **Page:** B's two-card layout, plus A's discovery candidates (`candidatesHTML`) under the approver card.
+
+**Decisions made while fixing the merge:**
+- **Templates for A's rule_ids:** 33 entries added to `templates.yaml` for c3, c4, c9, c5, c6 and c7, each with `en`, `hi` and `contest_*`, plus `ask_*` and `missing_*` where the carrier can act on it.
+  - `discovery_none` uses the same ask text as `gstin_missing`. The two are always raised together, so `follow_ups()` sends the carrier one ask, not two.
+  - `internal: true` (approver card only): `no_recent_activity` and `no_activity_data` (a gap in our data, not the carrier's), and `people_one_anchor` (a possible namesake).
+  - Carrier wording never names other vendors or says what the news says.
+- **Limits are named, not hidden:**
+  - `resolve._guarded()` catches `OverLimit` before `SourceUnavailable`, so the note reads `Crustdata <rung>: over cost cap` instead of `unavailable`.
+  - `checks.c3()` takes `gather` as an optional argument. When gather was skipped for a limit, c3 returns that `limit_rule` (Cannot verify) instead of `identity_unconfirmed` / "GST did not confirm this GSTIN".
+- **Tests updated to match built features** (intent kept, not weakened):
+  - Cost cap: Crustdata calls in resolve are free while `crustdata_credit` is 0.0, so they may run. The test checks that no GST call was made and that cost stays under the cap.
+  - Intake: a name-only paste now goes through discovery, so only parse-provider calls are compared.
+  - Vendor card: c5 to c7 are built, so no `not_built` gap exists. The test expects an internal `not_checked` gap on the approver card instead.
+  - `test_intake.py`'s `fresh_db` fixture stubs Crustdata, as `test_decide.py`'s `db` fixture does. Without it, intake tests would spend credits wherever `.env` has `CRUSTDATA_API_KEY`.
+  - New: `test_crustdata_call_blocked_by_a_limit_is_noted_as_the_limit`; the cost cap test also checks c3 gives `over_cost_cap`.
+
+**Open after the merge:**
+- [ ] Rerun `scripts/eval.py` and `scripts/kill_test.py` on the merged code (the kill test with Crustdata off for its worker, see phase 2).
+- [ ] Once `prices_inr.crustdata_credit` is set, the cost cap can stop Crustdata calls too. Check the cost cap test then, as it assumes they're free.
+- [ ] A Hindi reader reviews the new `templates.yaml` entries along with the rest (`hindi_reviewed` is still false).
+

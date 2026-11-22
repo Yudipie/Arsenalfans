@@ -94,7 +94,7 @@
 - **Candidates on the page** are built from c3's cited `cand.*` facts and the `search.*` facts in `web/index.html`. `output.py` and `app.py` (B's files) weren't touched.
 - **Eval `needs`:** a case file can list checks it depends on (case 9: `["c7"]`). The case is pending until those exist. Without `needs`, every mismatch counts as wrong.
 
-**New rule_ids (B: `templates.yaml` needs a sentence for each):**
+**New rule_ids (B: `templates.yaml` needs a sentence for each).** Done at the merge with phase 3; see the "Merge" section in [phase 4](phase-4-signals-cost.md).
 - c3: `identity_confirmed`, `identity_pan_level`, `identity_unconfirmed`, `name_mismatch`, `several_pans`, `identify_tie`, `acquired_or_merged`, `discovery_none`, `not_checked`
 - c4: `dup_none`, `dup_known_vendor`, `dup_branch`, `dup_other_name`, `bank_changed`, `not_checked`
 - c9: `bank_ok`, `bank_not_given`, `ifsc_missing`, `ifsc_not_found`, `payee_missing`, `payee_mismatch`, `source_unavailable`, `not_checked`
@@ -109,5 +109,5 @@
 ## Notes for phase 4
 
 - `resolve.crustdata_identity()` already calls Identify and Enrich (`basic_info`, `revenue`) on the best name match. c5 can add `web_traffic`, `hiring` and `news` to the same Enrich call and read the stored response.
-- `resolve._guarded()` is the pattern for an optional Crustdata rung: off, 403 or unavailable becomes a note and never blocks.
+- `resolve._guarded()` is the pattern for an optional Crustdata rung: off, 403 or unavailable becomes a note and never blocks. After the merge, a cost cap or time limit is noted by name (`over cost cap`), not as unavailable.
 - Case 9 has `needs: ["c7"]` and no GSTIN, so it goes through discovery. Its GSTIN isn't in `GST_FIXTURES` yet.

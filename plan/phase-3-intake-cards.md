@@ -107,6 +107,7 @@ Masking runs in `worker.submit()`, before the request is stored. So the stored r
   - optional `internal: true`.
 - Placeholders only: any fact_id with `.` replaced by `_` (`{gst_status}`, `{gst_cancelled_on}`), plus `{gap}`, `{gstin}` and `{name}`. A missing value renders as `—`. There's no logic in templates.
 - `internal: true` (`not_built`, `not_checked`) keeps build-status and knock-on gaps off the vendor card and out of the drafted asks. The approver still sees them.
+- After the merge with phase 2 and 4-A, every check is built, so `not_built` no longer appears in practice. Phase 2 and 4-A's rule_ids now have entries too; `no_recent_activity`, `no_activity_data` and `people_one_anchor` are also `internal`. Details in the "Merge" section of [phase 4](phase-4-signals-cost.md).
 
 ### Cards: `cc/output.py`
 
