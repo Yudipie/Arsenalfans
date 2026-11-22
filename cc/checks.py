@@ -33,7 +33,8 @@ def c2(evidence: list[dict], gather: dict) -> CheckResult:
     """Exists and status, from the GST API."""
     tried = gather.get("sources_tried", [])
     if gather.get("skipped"):
-        return CheckResult(check="c2", result="cannot_verify", rule_id="not_checked", gap=gather["skipped"])
+        return CheckResult(check="c2", result="cannot_verify", rule_id=gather.get("limit_rule", "not_checked"),
+                           gap=gather["skipped"])
     if gather.get("unavailable"):
         return CheckResult(check="c2", result="cannot_verify", rule_id="source_unavailable",
                            gap="GST source unavailable", sources_tried=tried)

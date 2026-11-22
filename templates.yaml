@@ -1,0 +1,153 @@
+# Card sentences, one entry per rule_id. Placeholders only, no logic.
+# Placeholders: any fact_id with "." replaced by "_" (e.g. {gst_status}, {gst_cancelled_on}), plus
+# {gap}, {gstin}, {name}. A missing value renders as "—".
+#   en / hi              the reason, on both cards
+#   contest_en / _hi     vendor card: how to contest, naming the document to send
+#   ask_en / _hi         follow-up draft to the vendor (Cannot verify only); shown with a copy button, never sent
+#   missing_en / _hi     vendor card "Missing:" item (Cannot verify only); no entry means nothing is listed
+#   internal: true       not shown on the vendor card or in follow-up drafts (approver card only)
+# The Hindi was drafted, not checked by a Hindi reader. The page shows "unreviewed translation" until this is true.
+hindi_reviewed: false
+
+rules:
+  # --- c1 formats (code only) ---
+  formats_ok:
+    en: "The GSTIN {gstin} has a valid format and check digit."
+    hi: "GSTIN {gstin} का फ़ॉर्मेट और चेक डिजिट सही है।"
+  gstin_missing:
+    en: "No GSTIN was given, so the carrier could not be looked up."
+    hi: "GSTIN नहीं दिया गया, इसलिए कैरियर की जाँच नहीं हो सकी।"
+    contest_en: "Send your GST registration certificate (Form GST REG-06)."
+    contest_hi: "अपना GST पंजीकरण प्रमाणपत्र (फ़ॉर्म GST REG-06) भेजें।"
+    ask_en: "Hello, to complete your onboarding as a carrier, please share your 15-character GSTIN and a copy of your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, कैरियर के रूप में आपकी ऑनबोर्डिंग पूरी करने के लिए कृपया अपना 15 अक्षरों का GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी भेजें।"
+    missing_en: "your 15-character GSTIN"
+    missing_hi: "आपका 15 अक्षरों का GSTIN"
+  name_and_gstin_missing:
+    en: "Neither the carrier's name nor a GSTIN was given."
+    hi: "न कैरियर का नाम दिया गया, न GSTIN।"
+    contest_en: "Send your registered business name and your GST registration certificate (REG-06)."
+    contest_hi: "अपने व्यवसाय का पंजीकृत नाम और GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    ask_en: "Hello, we could not find your business name or GSTIN in your message. Please share your registered business name, your GSTIN and a copy of your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, आपके संदेश में व्यवसाय का नाम या GSTIN नहीं मिला। कृपया अपने व्यवसाय का पंजीकृत नाम, GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी भेजें।"
+    missing_en: "your registered business name and GSTIN"
+    missing_hi: "आपके व्यवसाय का पंजीकृत नाम और GSTIN"
+  gstin_format:
+    en: "The GSTIN {gstin} is not valid as written (wrong length, characters or check digit). It was not corrected."
+    hi: "लिखा गया GSTIN {gstin} मान्य नहीं है (लंबाई, अक्षर या चेक डिजिट गलत है)। इसे सुधारा नहीं गया।"
+    contest_en: "Send a photo of your GST registration certificate (REG-06) showing the GSTIN."
+    contest_hi: "GSTIN दिखाते हुए अपने GST पंजीकरण प्रमाणपत्र (REG-06) की फ़ोटो भेजें।"
+    ask_en: "Hello, the GSTIN in your message ({gstin}) does not pass the GST format check; a letter may have been typed in place of a digit. Please send the correct GSTIN, or a photo of your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, आपके संदेश का GSTIN ({gstin}) फ़ॉर्मेट जाँच में सही नहीं निकला; शायद किसी अंक की जगह अक्षर लिख दिया गया है। कृपया सही GSTIN या GST पंजीकरण प्रमाणपत्र (REG-06) की फ़ोटो भेजें।"
+    missing_en: "a valid GSTIN ({gstin} does not pass the format check)"
+    missing_hi: "सही GSTIN ({gstin} फ़ॉर्मेट जाँच में सही नहीं निकला)"
+  gstin_state_code:
+    en: "The GSTIN {gstin} starts with a state code that does not exist."
+    hi: "GSTIN {gstin} की शुरुआत ऐसे राज्य कोड से होती है जो मौजूद नहीं है।"
+    contest_en: "Send your GST registration certificate (REG-06)."
+    contest_hi: "अपना GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    ask_en: "Hello, the GSTIN you shared ({gstin}) has a state code that does not exist. Please check it and send the correct GSTIN with your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, आपके दिए GSTIN ({gstin}) का राज्य कोड मौजूद नहीं है। कृपया जाँच कर सही GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    missing_en: "a valid GSTIN ({gstin} has a state code that does not exist)"
+    missing_hi: "सही GSTIN ({gstin} का राज्य कोड मौजूद नहीं है)"
+  pan_mismatch:
+    en: "The PAN given differs from the PAN inside the GSTIN {gstin}."
+    hi: "दिया गया PAN, GSTIN {gstin} के अंदर के PAN से मेल नहीं खाता।"
+    contest_en: "Send a copy of your PAN card and your GST registration certificate (REG-06)."
+    contest_hi: "अपने PAN कार्ड और GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी भेजें।"
+    ask_en: "Hello, the PAN you shared does not match the PAN inside your GSTIN. Please confirm which is correct and send a copy of your PAN card."
+    ask_hi: "नमस्ते, आपका दिया PAN आपके GSTIN के अंदर के PAN से मेल नहीं खाता। कृपया बताएँ कि कौन सा सही है और PAN कार्ड की कॉपी भेजें।"
+    missing_en: "which PAN is correct (the PAN given differs from the one inside the GSTIN)"
+    missing_hi: "कौन सा PAN सही है (दिया गया PAN, GSTIN के अंदर के PAN से अलग है)"
+  ifsc_format:
+    en: "The IFSC given is not in a valid format."
+    hi: "दिया गया IFSC सही फ़ॉर्मेट में नहीं है।"
+    contest_en: "Send a cancelled cheque or a bank letter showing the IFSC."
+    contest_hi: "IFSC दिखाता हुआ रद्द चेक या बैंक का पत्र भेजें।"
+    ask_en: "Hello, the IFSC in your message is not in a valid format. Please send a cancelled cheque or a bank letter showing your account's IFSC."
+    ask_hi: "नमस्ते, आपके संदेश का IFSC सही फ़ॉर्मेट में नहीं है। कृपया अपने खाते का IFSC दिखाता हुआ रद्द चेक या बैंक का पत्र भेजें।"
+    missing_en: "a valid IFSC"
+    missing_hi: "सही IFSC"
+  parse_failed:
+    en: "The pasted request could not be read into the onboarding form."
+    hi: "भेजे गए संदेश को ऑनबोर्डिंग फ़ॉर्म में पढ़ा नहीं जा सका।"
+    contest_en: "Fill in the onboarding form, or send your GSTIN, business name and bank details as plain text."
+    contest_hi: "ऑनबोर्डिंग फ़ॉर्म भरें, या अपना GSTIN, व्यवसाय का नाम और बैंक विवरण सादे टेक्स्ट में भेजें।"
+    ask_en: "Hello, we could not read your onboarding details from your message. Please send your business name, GSTIN, IFSC and payee name, one per line."
+    ask_hi: "नमस्ते, आपके संदेश से ऑनबोर्डिंग विवरण पढ़े नहीं जा सके। कृपया व्यवसाय का नाम, GSTIN, IFSC और भुगतान पाने वाले का नाम, हर एक अलग लाइन में भेजें।"
+    missing_en: "your business name, GSTIN, IFSC and payee name"
+    missing_hi: "आपके व्यवसाय का नाम, GSTIN, IFSC और भुगतान पाने वाले का नाम"
+
+  # --- c2 GST status ---
+  gst_active:
+    en: "GST lists the GSTIN as {gst_status}."
+    hi: "GST के रिकॉर्ड में GSTIN की स्थिति {gst_status} है।"
+  gst_cancelled:
+    en: "GST lists the GSTIN as {gst_status}, cancelled on {gst_cancelled_on}."
+    hi: "GST के रिकॉर्ड में GSTIN की स्थिति {gst_status} है, {gst_cancelled_on} को रद्द।"
+    contest_en: "Send the GST revocation order (Form GST REG-22) restoring the registration."
+    contest_hi: "पंजीकरण बहाल करने वाला GST रद्दीकरण-वापसी आदेश (फ़ॉर्म GST REG-22) भेजें।"
+  gst_suspended:
+    en: "GST lists the GSTIN as {gst_status}."
+    hi: "GST के रिकॉर्ड में GSTIN की स्थिति {gst_status} है।"
+    contest_en: "Send the GST order lifting the suspension, or proof that the registration is active again."
+    contest_hi: "निलंबन हटाने का GST आदेश, या पंजीकरण फिर से सक्रिय होने का प्रमाण भेजें।"
+  gst_status_other:
+    en: "GST lists the GSTIN with an unusual status: {gst_status}."
+    hi: "GST के रिकॉर्ड में GSTIN की स्थिति असामान्य है: {gst_status}।"
+    contest_en: "Send a current screenshot of your GSTIN on gst.gov.in and your registration certificate (REG-06)."
+    contest_hi: "gst.gov.in पर अपने GSTIN का ताज़ा स्क्रीनशॉट और पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+  gst_not_found:
+    en: "GST has no record of the GSTIN {gstin}."
+    hi: "GST के पास GSTIN {gstin} का कोई रिकॉर्ड नहीं है।"
+    contest_en: "Send your GST registration certificate (REG-06)."
+    contest_hi: "अपना GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    ask_en: "Hello, the GST system has no record of the GSTIN you shared ({gstin}). Please recheck it and send your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, GST सिस्टम में आपके दिए GSTIN ({gstin}) का कोई रिकॉर्ड नहीं है। कृपया इसे दोबारा जाँचें और GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    missing_en: "a GSTIN that GST has a record of ({gstin} was not found)"
+    missing_hi: "ऐसा GSTIN जिसका GST में रिकॉर्ड हो ({gstin} नहीं मिला)"
+
+  # --- not a finding about the carrier ---
+  source_unavailable:
+    en: "The source for this check did not answer: {gap}."
+    hi: "इस जाँच का स्रोत जवाब नहीं दे सका: {gap}।"
+    contest_en: "Nothing to send yet; we will retry the lookup."
+    contest_hi: "अभी कुछ भेजने की ज़रूरत नहीं; हम जाँच दोबारा करेंगे।"
+    ask_en: "Hello, we could not complete one of our checks because a government source did not respond. No action is needed from you yet; we will retry."
+    ask_hi: "नमस्ते, एक सरकारी स्रोत के जवाब न देने से हमारी एक जाँच पूरी नहीं हो सकी। अभी आपको कुछ करने की ज़रूरत नहीं; हम दोबारा कोशिश करेंगे।"
+  not_checked:
+    internal: true                 # a knock-on of another gap; approver card only
+    en: "This check was not run: {gap}."
+    hi: "यह जाँच नहीं हुई: {gap}।"
+    contest_en: "Send the corrected details named above."
+    contest_hi: "ऊपर बताए गए सही विवरण भेजें।"
+    ask_en: "Hello, one of our checks could not run because of the issue above. Please send the corrected details."
+    ask_hi: "नमस्ते, ऊपर बताई गई समस्या के कारण हमारी एक जाँच नहीं हो सकी। कृपया सही विवरण भेजें।"
+  not_built:
+    internal: true                 # build status; approver card only
+    en: "This check is not built yet: {gap}."
+    hi: "यह जाँच अभी बनी नहीं है: {gap}।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+    ask_en: "Hello, your onboarding is still being reviewed; no action is needed from you."
+    ask_hi: "नमस्ते, आपकी ऑनबोर्डिंग की समीक्षा अभी चल रही है; आपको कुछ करने की ज़रूरत नहीं।"
+  over_cost_cap:
+    en: "This check was not run: the job reached its cost cap."
+    hi: "यह जाँच नहीं हुई: काम अपनी लागत सीमा तक पहुँच गया।"
+    contest_en: "Nothing to send; a reviewer will finish this check."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं; समीक्षक यह जाँच पूरी करेंगे।"
+    ask_en: "Hello, your onboarding needs a manual review step; no action is needed from you yet."
+    ask_hi: "नमस्ते, आपकी ऑनबोर्डिंग में एक मैनुअल समीक्षा बाकी है; अभी आपको कुछ करने की ज़रूरत नहीं।"
+  over_time_limit:
+    en: "This check was not run: the job reached its time limit."
+    hi: "यह जाँच नहीं हुई: काम अपनी समय सीमा तक पहुँच गया।"
+    contest_en: "Nothing to send; a reviewer will finish this check."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं; समीक्षक यह जाँच पूरी करेंगे।"
+    ask_en: "Hello, your onboarding needs a manual review step; no action is needed from you yet."
+    ask_hi: "नमस्ते, आपकी ऑनबोर्डिंग में एक मैनुअल समीक्षा बाकी है; अभी आपको कुछ करने की ज़रूरत नहीं।"
+
+  # --- approver card (not a rule) ---
+  bank_holder_not_checked:
+    internal: true
+    en: "Account holder not verified"
+    hi: "खाताधारक का सत्यापन नहीं हुआ"

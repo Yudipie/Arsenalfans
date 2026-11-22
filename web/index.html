@@ -25,6 +25,13 @@
   footer { border-top: 1px solid var(--line); padding: 8px 16px; display:flex; gap: 12px; align-items:center; background:#f6f8fa; }
   .muted { color: var(--muted); } code { font-size: 12px; }
   button { cursor:pointer; }
+  .card { border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:10px; }
+  .card h3 { margin:0 0 6px; font-size:13px; }
+  .flag { color: var(--bad); font-weight:600; }
+  .tag { font-size:11px; background:#fff8c5; border:1px solid #d4a72c; border-radius:10px; padding:0 6px; margin-left:6px; }
+  .ask { white-space:pre-wrap; background:#f6f8fa; padding:6px; border-radius:4px; margin:4px 0; }
+  .hist { display:flex; gap:8px; } .hist > div { flex:1; border:1px solid var(--line); border-radius:6px; padding:6px; }
+  a.fl { color:#0969da; cursor:pointer; text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -66,7 +73,7 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let jobId = new URLSearchParams(location.search).get("job");
-let selected = null, last = null;
+let selected = null, last = null, lang = "en";
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
@@ -142,26 +149,52 @@ function render(j) {
   $("verdict").className = out ? out.verdict.split(" ")[0] : "muted";
   $("verdict").textContent = out ? out.verdict : (j.status === "queued" || j.status === "running" ? "working…" : "–");
   if (out) {
-    const card = j.verdict.card;
+    const a = j.verdict.card.approver, vc = j.verdict.card.vendor[lang], asks = j.verdict.card.asks[lang];
+    const fl = f => `<a class="fl" data-call="${f.call_id}" data-fact="${esc(f.fact_id)}">${esc(f.fact_id)} = ${esc(f.value)}</a>`;
+    const hist = j.history.length > 1 ? j.history.slice(-2) : [];
     $("card").innerHTML = `
-      <div><b>${esc(card.carrier ?? "(no name)")}</b> · <code>${esc(card.gstin ?? "no GSTIN")}</code> · PAN holder: ${esc(card.pan_holder_type ?? "?")}</div>
-      <div class="muted">Bank: IFSC ${esc(card.bank.ifsc ?? "–")} · account …${esc(card.bank.account_last4 ?? "–")} · holder not checked</div>
-      ${card.reasons.length ? "<h2 style='margin-top:10px'>Reasons</h2>" + card.reasons.map(r =>
-        `<div class="row"><b>${r.check}</b> <code>${esc(r.rule_id)}</code> ${r.facts.map(f => `· ${esc(f.fact_id)} = ${esc(f.value)}`).join(" ")}</div>`).join("") : ""}
-      ${card.gaps.length ? "<h2 style='margin-top:10px'>Gaps</h2>" + card.gaps.map(g =>
-        `<div class="row muted"><b>${g.check}</b> ${esc(g.missing)}${g.sources_tried.length ? " · tried " + esc(g.sources_tried.join(", ")) : ""}</div>`).join("") : ""}
-      ${card.notes.length ? "<h2 style='margin-top:10px'>Notes</h2>" + card.notes.map(n => `<div class="row">${esc(n)}</div>`).join("") : ""}
+      ${hist.length ? `<div class="card"><h3>Redecided: previous vs now</h3><div class="hist">${hist.map((h, i) =>
+        `<div><b class="${h.verdict.split(" ")[0]}">${esc(h.verdict)}</b> <span class="muted">${i ? "now" : "before"}</span>
+         <div class="muted">rules ${esc(h.rules_hash.slice(0, 8))} · ${h.reasons.map(esc).join(", ") || "–"}</div></div>`).join("")}</div></div>` : ""}
+      <div class="card"><h3>Vendor card
+        <button id="lang-en" ${lang === "en" ? "disabled" : ""}>English</button><button id="lang-hi" ${lang === "hi" ? "disabled" : ""}>हिन्दी</button>
+        ${vc.reviewed ? "" : `<span class="tag">unreviewed translation</span>`}</h3>
+        <div><b class="${vc.verdict.split(" ")[0]}">${esc(vc.verdict)}</b></div>
+        ${vc.reasons.map(r => `<div class="row">${esc(r.text)}
+          ${r.sources.length ? `<div class="muted">Source: ${r.sources.map(s => esc(s.source) + ", " + esc(s.retrieved_at)).join("; ")}</div>` : ""}
+          ${r.contest ? `<div class="muted">To contest: ${esc(r.contest)}</div>` : ""}</div>`).join("")}
+        ${vc.missing.length ? `<div class="muted">Missing: ${vc.missing.map(esc).join("; ")}</div>` : ""}
+      </div>
+      ${asks.length ? `<div class="card"><h3>Drafted ask to the vendor (not sent)</h3>${asks.map((t, i) =>
+        `<div class="ask">${esc(t)}</div><button class="copy" data-i="${i}">Copy</button>`).join("")}</div>` : ""}
+      <div class="card"><h3>Approver card</h3>
+        <div><b>${esc(a.carrier ?? "(no name)")}</b> · <code>${esc(a.gstin ?? "no GSTIN")}</code> · PAN holder: ${esc(a.pan_holder_type ?? "?")}</div>
+        <div class="muted">Bank: IFSC ${esc(a.bank.ifsc ?? "–")} · account …${esc(a.bank.account_last4 ?? "–")} · <b>${esc(a.bank.note)}</b></div>
+        ${a.flagged_lines.length ? `<h2 style="margin-top:10px">Flagged lines (ignored)</h2>` + a.flagged_lines.map(l => `<div class="row flag">${esc(l)}</div>`).join("") : ""}
+        ${a.reasons.length ? "<h2 style='margin-top:10px'>Reasons</h2>" + a.reasons.map(r =>
+          `<div class="row"><b>${r.check}</b> ${esc(r.text_en ?? r.rule_id)} <code>${esc(r.rule_id)}</code> ${r.facts.map(fl).join(" · ")}</div>`).join("") : ""}
+        ${a.gaps.length ? "<h2 style='margin-top:10px'>Gaps</h2>" + a.gaps.map(g =>
+          `<div class="row muted"><b>${g.check}</b> ${esc(g.missing)}${g.sources_tried.length ? " · tried " + esc(g.sources_tried.join(", ")) : ""}</div>`).join("") : ""}
+        ${a.notes.length ? "<h2 style='margin-top:10px'>Parse notes</h2>" + a.notes.map(n => `<div class="row">${esc(n)}</div>`).join("") : ""}
+        <div class="muted" style="margin-top:6px">Cost ₹${a.cost_inr} · approval hash <code>${esc((a.approval_hash ?? "").slice(0, 16))}…</code></div>
+      </div>
       ${candidatesHTML(j)}`;
     document.querySelectorAll(".cand-fact").forEach(el => el.onclick = () => showSource(j.evidence.find(e => e.evidence_id == el.dataset.id)));
+    $("lang-en").onclick = () => { lang = "en"; render(last); };
+    $("lang-hi").onclick = () => { lang = "hi"; render(last); };
+    document.querySelectorAll(".copy").forEach(b => b.onclick = () => navigator.clipboard.writeText(asks[b.dataset.i]));
+    document.querySelectorAll("a.fl").forEach(el => el.onclick = () =>
+      showSource(j.evidence.find(e => e.call_id == el.dataset.call && e.fact_id === el.dataset.fact)));
   } else $("card").innerHTML = "";
 
   const live = j.approvals.filter(a => !a.void), voided = j.approvals.filter(a => a.void);
   $("approve-box").innerHTML = (j.approval_hash ? `
       <div class="muted">Approval hash <code>${j.approval_hash.slice(0, 16)}…</code></div>
-      <button id="approve">Approve this verdict</button>` : "") +
+      <button id="approve">Approve this verdict</button> <button id="redecide">Redecide (current rules.yaml)</button>` : "") +
     (live.length ? `<div class="pass">Approved by ${esc(live[0].approved_by)} (${live.length} row)</div>` : "") +
     (voided.length ? `<div class="muted">${voided.length} earlier approval(s) void after an edit</div>` : "");
   if ($("approve")) $("approve").onclick = () => api(`/jobs/${jobId}/approve`, {approval_hash: j.approval_hash}).catch(e => alert(e.message));
+  if ($("redecide")) $("redecide").onclick = () => api(`/jobs/${jobId}/redecide`, {}).catch(e => alert(e.message));
 
   const r = j.resumes.at(-1);
   $("resume").textContent = r ? `resumed at ${r.step ?? "end"} · ${j.repeated_calls} paid calls repeated · ₹${j.respent_inr} re-spent` : "";
