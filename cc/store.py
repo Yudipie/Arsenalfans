@@ -165,10 +165,12 @@ def call_started(call_key: str, provider: str, request: dict, job_id: str) -> No
             c.execute("UPDATE calls SET status='in_flight', started_at=? WHERE call_key=?", (time.time(), call_key))
 
 
-def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: str = "done") -> None:
+def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: str = "done",
+                  tokens: tuple = (None, None)) -> None:
     with tx() as c:
-        c.execute("UPDATE calls SET response=?, status=?, cost_inr=?, mock=?, finished_at=? WHERE call_key=?",
-                  (json.dumps(response, default=str), status, cost_inr, int(mock), time.time(), call_key))
+        c.execute("""UPDATE calls SET response=?, status=?, cost_inr=?, mock=?, finished_at=?, tokens_in=?,
+                     tokens_out=? WHERE call_key=?""",
+                  (json.dumps(response, default=str), status, cost_inr, int(mock), time.time(), *tokens, call_key))
 
 
 def job_calls(job_id: str) -> list[dict]:
@@ -207,6 +209,22 @@ def approve(job_id: str, approval_hash: str, approved_by: str) -> None:
     with tx() as c:
         c.execute("INSERT OR IGNORE INTO approvals (job_id, approval_hash, approved_by, approved_at) VALUES (?,?,?,?)",
                   (job_id, approval_hash, approved_by, time.time()))
+
+
+def verdicts(job_id: str) -> list[dict]:
+    """Every verdict for the job, oldest first; redecide adds rows so old and new can be compared."""
+    rows = _all("SELECT verdict_id, verdict, output, rules_hash, decided_at FROM verdicts WHERE job_id=? "
+                "ORDER BY verdict_id", job_id)
+    for r in rows:
+        out = json.loads(r.pop("output"))
+        r["reasons"] = [x["rule_id"] for x in out["reasons"]]
+        r["cost_inr"] = out["cost_inr"]
+    return rows
+
+
+def void_approvals_except(job_id: str, approval_hash: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE approvals SET void=1 WHERE job_id=? AND approval_hash<>?", (job_id, approval_hash))
 
 
 def approvals(job_id: str) -> list[dict]:

@@ -27,16 +27,16 @@
 
 ## B: cost, limits, redecide
 
-- [ ] Cost per call in `calls`:
+- [x] Cost per call in `calls`:
   - Crustdata credits × `prices_inr.crustdata_credit`.
   - The GST per-call price.
   - Haiku input and output tokens × the prices in `rules.yaml`.
 
   The job total is the sum over that job's calls. It's shown on the approver card and in the output's `cost_inr`.
-- [ ] Limits in `cc/worker.py`:
+- [x] Limits (checked in `sources.call()` before each paid call):
   - Before each paid call, if the job's spend plus the call's price would pass `cost_cap_inr`, the remaining checks get Cannot verify: over cost cap.
   - Past `time_limit_s`, the remaining checks get Cannot verify: over time limit.
-- [ ] `redecide(job_id)` in `cc/worker.py`, plus `POST /jobs/{id}/redecide`. It reruns checks and decide from stored evidence with the current `rules.yaml`, makes no outside calls, adds a new `verdicts` row and voids the approval if the hash changed. The page shows the old and new verdicts side by side.
+- [x] `redecide(job_id)` in `cc/worker.py`, plus `POST /jobs/{id}/redecide`. It reruns checks and decide from stored evidence with the current `rules.yaml`, makes no outside calls, adds a new `verdicts` row and voids the approval if the hash changed. The page shows the old and new verdicts side by side.
 - [ ] Rehearse each live fix once and time it:
 
   | Likely request | Where | Then |
@@ -67,7 +67,7 @@
 ## Done when
 
 - [ ] Case 9: the common-name director's namesake raises no flag and nothing about them is stored.
-- [ ] The rupee total on the approver card equals the sum of the job's `calls` rows.
-- [ ] Lowering `cost_cap_inr` turns the remaining checks into Cannot verify: over cost cap.
+- [x] The rupee total on the approver card equals the sum of the job's `calls` rows.
+- [x] Lowering `cost_cap_inr` turns the remaining checks into Cannot verify: over cost cap.
 - [ ] Each live fix above works in under 5 minutes.
 - [ ] `scripts/eval.py` shows no wrong verdict, and `scripts/kill_test.py` still passes.

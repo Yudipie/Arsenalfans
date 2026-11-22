@@ -16,7 +16,7 @@ Hackathon build: 2 builders (A, B), about 3 hours. Updated 22 November 2026. Rep
 | [4 Signals, cost, live fixes](phase-4-signals-cost.md) | 1:50–2:30 | c5, c6, c7 | cost, caps, redecide |
 | [5 Rehearse and demo](phase-5-rehearse-demo.md) | 2:30–3:00 | together | together |
 
-**Status (22 November 2026):** phases 0 and 1 are done. Phase 0's open items are the keys and carrier confirmation; phase 1's is a live GST run. Phases 2 and 3 are next, and can run in parallel.
+**Status (22 November 2026):** phases 0, 1 and 3 are done, and so is phase 4's B half (cost, limits, redecide). Phase 0's open items are the keys and carrier confirmation; phase 1's is a live GST run; phase 4-B still has the timed live-fix rehearsal. Phase 2 (A) and then 4-A are next.
 
 A phase is done only when:
 
@@ -108,6 +108,30 @@ Before a 3PL gives a load and money to a new carrier, someone has to prove the c
   - `CC_DB` sets the database path (the default is `logs/cc.sqlite`). Eval and the kill test give each run a new file.
   - `CC_STEP_DELAY` adds simulated latency per step and per call, so kills land mid-job.
 - **The approver card has no sentences yet.** It shows structured fields and `rule_id`s; the sentences come from `templates.yaml` in phase 3. There are no Verdict or Approval pydantic models: `serialize()` builds the verdict and approvals are plain rows. The verdict row is written in the output step.
+
+**Added in phases 3 and 4-B:**
+
+- **Masking runs at submit** (`intake.scrub_request()` → `mask_text()`):
+  - A 12-digit number that passes Verhoeff becomes `[aadhaar removed]`. Any other long number becomes `[number ****1234]`.
+  - An account number labelled `a/c` or `account` is hashed into `fields.account_hash`.
+  - Phone numbers, address lines (a 6-digit PIN, or a line starting `address` or `pata`) and director names found in the text are masked.
+  - `fields.directors` keeps the names, because c7 needs them.
+- **The parse:**
+  - Providers are `providers.parse: [haiku, fixture]`. The fixture answers only with `MOCK=1`, and only for case 8.
+  - Flagged lines are removed from the prompt.
+  - A parsed GSTIN, PAN or IFSC not written word for word in the text is dropped.
+  - A schema failure retries once with `attempt: 2` (a new call key); after that, c1 gives `parse_failed`.
+  - `ParsedText` lives in `cc/core.py` to avoid a circular import.
+- **c1** gives `name_and_gstin_missing` when both are absent. With a name but no GSTIN it still gives `gstin_missing`, and discovery picks that up.
+- **`call()` contract (for A):**
+  - A provider function returns `resp` or `(resp, meta)`, where meta is `{"credits": n}` or `{"tokens_in", "tokens_out"}`. `_cost()` turns that into rupees.
+  - `call()` checks the limits before each paid call and raises `OverLimit(rule_id)`, which is a `SourceUnavailable`. With `sources.OFFLINE` set (during redecide), it never fetches.
+  - Checks read `gather["limit_rule"]` (`over_cost_cap` or `over_time_limit`) as their rule_id. c2 already does.
+- **Templates:**
+  - `templates.yaml` has `hindi_reviewed: false`, and per `rule_id`: `en`/`hi`, `contest_*`, `ask_*`, and an optional `internal: true`.
+  - Internal rules (`not_built`, `not_checked`) are kept off the vendor card and out of the asks.
+  - `test_every_rule_id_has_both_sentences` fails until every new `rule_id` has an entry.
+- **Cards:** `verdicts.card` is now `{approver, vendor: {en, hi}, asks: {en, hi}}`.
 
 ## 4. Architecture
 

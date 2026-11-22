@@ -221,9 +221,10 @@ def test_cancelled_gstin_rejects_citing_status_and_date(db):
     assert {f["fact_id"] for f in reason["facts"]} == {"gst.status", "gst.cancelled_on"}
 
 
-def test_bad_format_makes_no_call(db):
+def test_bad_format_makes_no_gst_call(db):
     job_id, v = run_case(8)
-    assert v["verdict"] == "Cannot verify" and store.job_calls(job_id) == []
+    assert v["verdict"] == "Cannot verify"
+    assert [c for c in store.job_calls(job_id) if "gstin" in json.loads(c["request"])] == []
 
 
 def test_a_stored_call_is_reused_not_fetched_again(db, monkeypatch):
@@ -255,3 +256,129 @@ def test_approve_twice_gives_one_row_and_edit_voids_it(db):
     assert [a["void"] for a in store.approvals(job_id)] == [1]
     worker.run_job(job_id)
     assert current_hash(job_id) != h
+
+
+# --- phase 3: templates and cards ---
+
+import re  # noqa: E402
+
+from cc.core import load_templates  # noqa: E402
+
+
+def used_rule_ids() -> set[str]:
+    ids = set()
+    for f in ("checks.py", "intake.py", "worker.py"):
+        ids |= set(re.findall(r'rule_id="(\w+)"', (ROOT / "cc" / f).read_text(encoding="utf-8")))
+        ids |= set(re.findall(r'cv\("(\w+)"', (ROOT / "cc" / f).read_text(encoding="utf-8")))
+    return ids | {"over_cost_cap", "over_time_limit"}
+
+
+def test_every_rule_id_has_both_sentences():
+    rules = load_templates()["rules"]
+    for rid in used_rule_ids():
+        assert rid in rules, f"templates.yaml has no entry for {rid}"
+        assert rules[rid].get("en") and rules[rid].get("hi"), rid
+
+
+def test_templates_use_placeholders_only_and_hindi_is_flagged():
+    t = load_templates()
+    assert t["hindi_reviewed"] is False
+    for rid, entry in t["rules"].items():
+        for k, s in entry.items():
+            if isinstance(s, str):
+                assert not re.search(r"\{[^}]*[^\w}][^}]*\}", s), f"{rid}.{k}: placeholders only"
+
+
+def test_cannot_verify_rules_have_contest_and_ask():
+    rules = load_templates()["rules"]
+    for rid in used_rule_ids() - {"formats_ok", "gst_active"}:
+        for k in ("contest_en", "contest_hi"):
+            assert rules[rid].get(k), f"{rid}.{k}"
+
+
+@pytest.mark.parametrize("n, verdict", [(4, "Reject"), (8, "Cannot verify")])
+def test_vendor_cards_in_both_languages(db, monkeypatch, n, verdict):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    _, v = run_case(n)
+    assert v["verdict"] == verdict
+    for lang in ("en", "hi"):
+        vc = v["card"]["vendor"][lang]
+        assert vc["verdict"] == verdict and vc["reasons"]
+        assert all(r["text"] and r["contest"] and "—" not in r["text"] for r in vc["reasons"])
+    if n == 4:
+        r = v["card"]["vendor"]["en"]["reasons"][0]
+        assert "2019-12-03" in r["text"] and r["sources"][0]["source"] == "fixture_gstin" and r["sources"][0]["retrieved_at"]
+        assert "REG-22" in r["contest"]
+    assert v["card"]["vendor"]["hi"]["reviewed"] is False
+
+
+def test_refer_renders_with_source(db, monkeypatch):
+    monkeypatch.setitem(sources.GST_FIXTURES, "27AAACR2504F1ZU",
+                        {**sources.GST_FIXTURES["27AAACR2504F1ZU"], "gst_in_status": "Provisional"})
+    _, v = run_case(2)
+    reason = next(r for r in v["output"]["reasons"] if r["rule_id"] == "gst_status_other")
+    assert "Provisional" in reason["text_en"] and "Provisional" in reason["text_hi"] and reason["facts"]
+    assert v["card"]["approver"]["bank"]["note"] == "Account holder not verified"
+
+
+# --- phase 4-B: cost, limits, redecide ---
+
+def test_job_cost_is_the_sum_of_its_calls(db, monkeypatch):
+    monkeypatch.setitem(sources.PRICE_KEYS, "fixture", "cashfree_gstin")  # give the fixture a price
+    monkeypatch.setitem(sources.PARSE_PROVIDERS, "haiku",
+                        lambda **_: ({"text": json.dumps({"name": "Ashirwad Roadways", "gstin": "23AKHPK8O71C1ZE"})},
+                                     {"tokens_in": 1_000_000, "tokens_out": 100_000}))
+    for n in (2, 8):
+        job_id, v = run_case(n)
+        calls = store.job_calls(job_id)
+        assert v["output"]["cost_inr"] == round(sum(c["cost_inr"] * (1 + c["repeats"]) for c in calls), 2)
+        assert v["card"]["approver"]["cost_inr"] == v["output"]["cost_inr"] > 0
+    p = load_rules()["prices_inr"]
+    haiku = next(c for c in store.job_calls(job_id) if c["provider"] == "haiku")
+    assert (haiku["tokens_in"], haiku["tokens_out"]) == (1_000_000, 100_000)
+    assert haiku["cost_inr"] == pytest.approx(p["haiku_in_per_mtok"] + p["haiku_out_per_mtok"] / 10)
+
+
+def test_cost_cap_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
+    rules = load_rules()
+    rules["limits"]["cost_cap_inr"] = 0.5
+    monkeypatch.setattr(sources, "load_rules", lambda: rules)
+    monkeypatch.setitem(sources.PRICE_KEYS, "fixture", "cashfree_gstin")  # ₹1 > ₹0.5 cap
+    job_id, v = run_case(2)
+    c2 = next(c for c in v["checks"] if c["check"] == "c2")
+    assert (c2["result"], c2["rule_id"]) == ("cannot_verify", "over_cost_cap")
+    assert v["verdict"] == "Cannot verify" and store.job_calls(job_id) == []
+
+
+def test_time_limit_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
+    rules = load_rules()
+    rules["limits"]["time_limit_s"] = -1
+    monkeypatch.setattr(sources, "load_rules", lambda: rules)
+    _, v = run_case(2)
+    c2 = next(c for c in v["checks"] if c["check"] == "c2")
+    assert c2["rule_id"] == "over_time_limit"
+
+
+def test_redecide_uses_stored_evidence_only_and_voids_on_hash_change(db, monkeypatch):
+    job_id, v = run_case(4)
+    h = current_hash(job_id)
+    store.approve(job_id, h, "a")
+    monkeypatch.setitem(sources.GST_PROVIDERS, "fixture", lambda **_: pytest.fail("fetched again"))
+    worker.redecide(job_id)  # same rules: same hash, approval kept
+    assert [a["void"] for a in store.approvals(job_id)] == [0]
+    assert len(store.verdicts(job_id)) == 2
+    monkeypatch.setattr(worker, "rules_hash", lambda: "edited-rules")
+    out = worker.redecide(job_id)
+    assert out["approval_hash"] != h
+    assert [a["void"] for a in store.approvals(job_id)] == [1]
+    hist = store.verdicts(job_id)
+    assert len(hist) == 3 and hist[-1]["rules_hash"] == "edited-rules" and hist[-1]["verdict"] == "Reject"
+
+
+def test_redecide_never_fetches(db, monkeypatch):
+    job_id, _ = run_case(2)
+    with store.tx() as c:  # pretend the stored GST call is gone; redecide must not refetch it
+        c.execute("DELETE FROM calls")
+    monkeypatch.setattr(sources, "OFFLINE", False)
+    worker.redecide(job_id)
+    assert sources.OFFLINE is False and store.job_calls(job_id) == []

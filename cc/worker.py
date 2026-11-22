@@ -22,13 +22,6 @@ def _log(**kw) -> None:
         f.write(json.dumps({"t": round(time.time(), 3), "pid": os.getpid(), **kw}) + "\n")
 
 
-def _over_limits(job: dict, rules: dict) -> str | None:
-    """Stub: elapsed time only. Phase 4 adds the cost cap and the card wording."""
-    if job["started_at"] and time.time() - job["started_at"] > rules["limits"]["time_limit_s"]:
-        return "time limit reached"
-    return None
-
-
 # Each step takes (job, done) and returns (output, extra), where extra(conn) writes inside the step's transaction.
 
 def step_intake(job, done):
@@ -56,13 +49,12 @@ def step_gather(job, done):
     gstins = done["resolve"]["gstins"]
     if not gstins:
         return {"skipped": done["resolve"].get("note", "no GSTIN to look up"), "dropped": 0}, None
-    limit = _over_limits(store.job(job["job_id"]), load_rules())
-    if limit:
-        return {"skipped": limit, "dropped": 0}, None
     facts, tried, unavailable = [], [], False
     for g in gstins:
         try:
             facts += sources.gst_lookup(job["job_id"], g)
+        except sources.OverLimit as e:  # cost cap or time limit, checked inside call() before each paid call
+            return {"skipped": e.rule_id.replace("_", " "), "limit_rule": e.rule_id, "dropped": 0}, None
         except sources.SourceUnavailable as e:
             tried, unavailable = e.sources_tried, True
     responses = {f["call_id"]: json.loads(store.call_by_id(f["call_id"])["response"]) for f in facts}
@@ -94,8 +86,9 @@ def step_output(job, done):
     record = {**done["intake"], "parse_notes": done["intake"]["parse_notes"] + done["formats"]["parse_notes"]}
     ev, calls, rh = store.evidence(job_id), store.job_calls(job_id), rules_hash()
     out = output.serialize(job, record, done["decide"], ev, calls, rh)
-    card = output.approver_card(out, record, done["checks"]["results"])
-    card["approval_hash"] = output.approval_hash(out["verdict"], [e["evidence_id"] for e in ev], job["bank_hash"], rh)
+    card = output.cards(out, record, done["checks"]["results"])
+    card["approver"]["approval_hash"] = output.approval_hash(out["verdict"], [e["evidence_id"] for e in ev],
+                                                             job["bank_hash"], rh)
 
     def extra(c):
         c.execute("INSERT INTO verdicts (job_id, verdict, checks, output, card, rules_hash, decided_at) VALUES (?,?,?,?,?,?,?)",
@@ -137,6 +130,31 @@ def run_job(job_id: str) -> None:
         store.finish_step(job_id, name, out, started, extra)
         done[name] = out
         _log(event="step", job_id=job_id, step=name)
+
+
+REDECIDE_STEPS = ["checks", "decide", "output"]
+
+
+def redecide(job_id: str) -> dict:
+    """Rerun checks, decide and output from stored evidence with the current rules.yaml and templates.yaml.
+    No outside calls (sources.OFFLINE). Adds a verdicts row; voids approvals made under a different hash."""
+    job = store.job(job_id)
+    done = store.done_steps(job_id)
+    sources.OFFLINE = True
+    try:
+        for name in REDECIDE_STEPS:
+            started = time.time()
+            out, extra = STEP_FNS[name](job, done)
+            store.finish_step(job_id, name, out, started, extra)
+            done[name] = out
+    finally:
+        sources.OFFLINE = False
+    v, job = store.latest_verdict(job_id), store.job(job_id)
+    new_hash = output.approval_hash(v["verdict"], [e["evidence_id"] for e in store.evidence(job_id)],
+                                    job["bank_hash"], v["rules_hash"])
+    store.void_approvals_except(job_id, new_hash)
+    _log(event="redecide", job_id=job_id, verdict=v["verdict"])
+    return {"verdict": v["verdict"], "approval_hash": new_hash}
 
 
 def main() -> None:

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from cc import output, store
 from cc.core import ROOT, Request, mock
 from cc.intake import scrub_request
-from cc.worker import STEPS, submit
+from cc.worker import STEPS, redecide, submit
 
 _worker: subprocess.Popen | None = None
 
@@ -109,6 +109,7 @@ def get_job(job_id: str):
         "verdict": v and {"checks": v["checks"], "output": v["output"], "card": v["card"]},
         "approval_hash": _current_hash(job_id),
         "approvals": store.approvals(job_id),
+        "history": store.verdicts(job_id),
         "repeated_calls": sum(c["repeats"] for c in calls),
         "respent_inr": round(sum(c["repeats"] * c["cost_inr"] for c in calls), 2),
         "cost_inr": round(sum(c["cost_inr"] * (1 + c["repeats"]) for c in calls), 2),
@@ -137,6 +138,15 @@ def edit(job_id: str, body: Edit):
         raise HTTPException(422, str(e))
     store.edit(job_id, clean)
     return {"job_id": job_id}
+
+
+@app.post("/jobs/{job_id}/redecide")
+def redecide_job(job_id: str):
+    """Recheck stored evidence with the current rules.yaml; no outside calls."""
+    job = _job_or_404(job_id)
+    if job["status"] != "awaiting_approval":
+        raise HTTPException(409, f"job is {job['status']}; redecide after it finishes")
+    return redecide(job_id)
 
 
 @app.get("/worker")
