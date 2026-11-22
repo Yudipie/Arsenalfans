@@ -125,7 +125,7 @@ def step_checks(job, done):
     results = [
         c1,
         checks.c2(ev, done["gather"]),
-        checks.c3(ev, done["resolve"], rec, rules),
+        checks.c3(ev, done["resolve"], rec, rules, done["gather"]),
         checks.c4(ev, done["gather"], rec, gstin, rules),
         checks.c9(ev, done["gather"], rec, gstin, rules),
         checks.c5(ev, done["gather"], rules),

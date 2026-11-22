@@ -57,7 +57,7 @@ def _vals(evidence: list[dict], prefix: str = "gst.") -> dict:
     return {e["fact_id"][len(prefix):]: e["value"] for e in evidence if e["fact_id"].startswith(prefix)}
 
 
-def c3(evidence: list[dict], resolve: dict, record: dict, rules: dict) -> CheckResult:
+def c3(evidence: list[dict], resolve: dict, record: dict, rules: dict, gather: dict | None = None) -> CheckResult:
     """Who is this. One GST-confirmed identity passes; several PANs, an Identify tie (name only), a name that
     matches neither GST name, or acquired/merged give Refer. Lookalikes on a GST-confirmed full request are listed only."""
     cutoff = rules["thresholds"]["fuzzy_cutoff"]
@@ -81,6 +81,8 @@ def c3(evidence: list[dict], resolve: dict, record: dict, rules: dict) -> CheckR
         if resolve.get("identify_tie"):
             return r("refer", "identify_tie", [l["fact_id"] for l in resolve.get("lookalikes", [])])
     gst = _vals(evidence)
+    if (gather or {}).get("limit_rule"):  # the GST lookup was never made: name the limit, not a GST failure
+        return r("cannot_verify", gather["limit_rule"], gap=gather["skipped"])
     if "status" not in gst or gst.get("valid") is False:
         return r("cannot_verify", "identity_unconfirmed", gap="GST did not confirm this GSTIN")
     if resolve.get("acquired"):

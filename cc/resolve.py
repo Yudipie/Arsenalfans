@@ -11,7 +11,7 @@ from difflib import SequenceMatcher
 from cc import crustdata
 from cc.core import load_rules
 from cc.intake import GST_STATES, gstin_ok, pan_from_gstin
-from cc.sources import SIGNAL_PROVIDERS, RungOff, SourceUnavailable, call, fact, get_path, gst_lookup
+from cc.sources import SIGNAL_PROVIDERS, OverLimit, RungOff, SourceUnavailable, call, fact, get_path, gst_lookup
 
 _GSTIN_IN_TEXT = re.compile(r"\b\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b")
 
@@ -53,6 +53,8 @@ def _guarded(job_id, provider, request, rungs_off, notes):
     except RungOff:
         rungs_off.append(rung)
         notes.append(f"Crustdata {rung}: not on this key (403)")
+    except OverLimit as e:
+        notes.append(f"Crustdata {rung}: {e.rule_id.replace('_', ' ')}")
     except SourceUnavailable:
         notes.append(f"Crustdata {rung}: unavailable")
     return None, None

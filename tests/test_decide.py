@@ -759,6 +759,7 @@ def test_cost_cap_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
     job_id, v = run_case(2)
     c2 = next(c for c in v["checks"] if c["check"] == "c2")
     assert (c2["result"], c2["rule_id"]) == ("cannot_verify", "over_cost_cap")
+    assert checks_of(v)["c3"] == ("cannot_verify", "over_cost_cap"), "c3 names the limit, not a GST failure"
     assert v["verdict"] == "Cannot verify"
     # the ₹1 GST call is never made; resolve's Crustdata calls are free (crustdata_credit is 0.0) so they may run
     assert [c for c in store.job_calls(job_id) if "gstin" in json.loads(c["request"])] == []
@@ -936,3 +937,14 @@ def test_redecide_blocks_a_check_that_tries_to_fetch(db, monkeypatch):
     monkeypatch.setitem(worker.STEP_FNS, "checks", checks_that_fetch)
     worker.redecide(job_id)
     assert fetched == []
+
+
+def test_crustdata_call_blocked_by_a_limit_is_noted_as_the_limit(monkeypatch):
+    from cc import resolve
+    def blocked(*a, **k):
+        raise sources.OverLimit("over_cost_cap", [])
+    monkeypatch.setattr(resolve, "call", blocked)
+    monkeypatch.setattr(resolve.crustdata, "rung_on", lambda provider: True)
+    notes = []
+    assert resolve._guarded("j", "crustdata_identify", {"names": ["x"]}, [], notes) == (None, None)
+    assert notes == ["Crustdata " + resolve.crustdata.PROVIDER_RUNG["crustdata_identify"] + ": over cost cap"]
