@@ -109,29 +109,14 @@ Before a 3PL gives a load and money to a new carrier, someone has to prove the c
   - `CC_STEP_DELAY` adds simulated latency per step and per call, so kills land mid-job.
 - **The approver card has no sentences yet.** It shows structured fields and `rule_id`s; the sentences come from `templates.yaml` in phase 3. There are no Verdict or Approval pydantic models: `serialize()` builds the verdict and approvals are plain rows. The verdict row is written in the output step.
 
-**Added in phases 3 and 4-B:**
+**Added in phases 3 and 4-B:** the full design decisions are in [phase-3-intake-cards.md](phase-3-intake-cards.md#design-decisions-as-built) and [phase-4-signals-cost.md](phase-4-signals-cost.md#b-design-decisions-as-built). In short:
 
-- **Masking runs at submit** (`intake.scrub_request()` → `mask_text()`):
-  - A 12-digit number that passes Verhoeff becomes `[aadhaar removed]`. Any other long number becomes `[number ****1234]`.
-  - An account number labelled `a/c` or `account` is hashed into `fields.account_hash`.
-  - Phone numbers, address lines (a 6-digit PIN, or a line starting `address` or `pata`) and director names found in the text are masked.
-  - `fields.directors` keeps the names, because c7 needs them.
-- **The parse:**
-  - Providers are `providers.parse: [haiku, fixture]`. The fixture answers only with `MOCK=1`, and only for case 8.
-  - Flagged lines are removed from the prompt.
-  - A parsed GSTIN, PAN or IFSC not written word for word in the text is dropped.
-  - A schema failure retries once with `attempt: 2` (a new call key); after that, c1 gives `parse_failed`.
-  - `ParsedText` lives in `cc/core.py` to avoid a circular import.
-- **c1** gives `name_and_gstin_missing` when both are absent. With a name but no GSTIN it still gives `gstin_missing`, and discovery picks that up.
-- **`call()` contract (for A):**
-  - A provider function returns `resp` or `(resp, meta)`, where meta is `{"credits": n}` or `{"tokens_in", "tokens_out"}`. `_cost()` turns that into rupees.
-  - `call()` checks the limits before each paid call and raises `OverLimit(rule_id)`, which is a `SourceUnavailable`. With `sources.OFFLINE` set (during redecide), it never fetches.
-  - Checks read `gather["limit_rule"]` (`over_cost_cap` or `over_time_limit`) as their rule_id. c2 already does.
-- **Templates:**
-  - `templates.yaml` has `hindi_reviewed: false`, and per `rule_id`: `en`/`hi`, `contest_*`, `ask_*`, and an optional `internal: true`.
-  - Internal rules (`not_built`, `not_checked`) are kept off the vendor card and out of the asks.
-  - `test_every_rule_id_has_both_sentences` fails until every new `rule_id` has an entry.
-- **Cards:** `verdicts.card` is now `{approver, vendor: {en, hi}, asks: {en, hi}}`.
+- Masking runs at submit. Flagged lines never reach the prompt. The parse uses `providers.parse: [haiku, fixture]`.
+- `templates.yaml` holds `en`, `hi`, `contest_*`, `ask_*` and `internal` per `rule_id`. `verdicts.card` is `{approver, vendor: {en, hi}, asks: {en, hi}}`.
+- **Contracts for A:**
+  - A provider function returns `(resp, {"credits": n})`.
+  - `call()` raises `OverLimit(rule_id)` before passing the cost cap or time limit. Checks read `gather["limit_rule"]`.
+  - Every new `rule_id` needs a `templates.yaml` entry.
 
 ## 4. Architecture
 
