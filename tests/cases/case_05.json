@@ -13,9 +13,9 @@
     "text": null
   },
   "expect_facts": [
-    "gst.legal_name"
+    "cand.*"
   ],
   "derived_from": null,
-  "evidence_note": "Two unrelated Mumbai proprietorships: 27AXEPG3338E1ZR (Sewree) and 27AOHPP0337G1Z0 (Ghatkopar), per knowyourgst.com / justdial. Discovery should find both PANs.",
+  "evidence_note": "Two unrelated Mumbai proprietorships: 27AXEPG3338E1ZR (Sewree) and 27AOHPP0337G1Z0 (Ghatkopar), per knowyourgst.com / justdial. Discovery should find both PANs. Live search (22 Nov 2026) instead returns other near-identical names, e.g. 24ANWPP5595N2ZR (Ahmedabad) and 07BVSPS5329G1ZZ (Delhi): still several PANs, still Refer.",
   "status": "unconfirmed"
 }

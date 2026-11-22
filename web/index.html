@@ -98,6 +98,32 @@ function showSource(fact) {
   render(last);
 }
 
+// Phase 2: discovery candidates side by side (c3 several_pans / identify_tie), each value clickable to its source.
+// When discovery resolved one PAN, the other GSTINs found for it are listed under it.
+function candidatesHTML(j) {
+  const c3 = (j.verdict?.checks || []).find(c => c.check === "c3");
+  const link = (e, text) => e ? `<span class="cand-fact" data-id="${e.evidence_id}" style="cursor:pointer;text-decoration:underline dotted">${esc(text ?? e.value)}</span>` : "–";
+  let html = "";
+  if (c3 && c3.result === "refer") {
+    const gstins = [...new Set(c3.facts.map(f => (f.match(/^cand\.([0-9A-Z]{15})\./) || [])[1]).filter(Boolean))];
+    const fact = (g, k) => j.evidence.find(e => e.fact_id === `cand.${g}.${k}`);
+    if (gstins.length) html += "<h2 style='margin-top:10px'>Candidates</h2><div style='display:flex;gap:8px'>" + gstins.map(g => {
+      const any = fact(g, "status") || fact(g, "trade_name");
+      return `<div class="row" style="flex:1;border:1px solid #ccc;padding:6px">
+        <div><code>${esc(g)}</code> · PAN ${esc(g.slice(2, 12))}</div>
+        <div>Legal: ${link(fact(g, "legal_name"))}</div><div>Trade: ${link(fact(g, "trade_name"))}</div>
+        <div>Status: ${link(fact(g, "status"))}</div><div>State: ${link(fact(g, "state"))}</div>
+        <div class="muted">${esc(any?.source ?? "")}${any?.mock ? " · mock" : ""}</div></div>`;
+    }).join("") + "</div>";
+  }
+  if (c3 && c3.rule_id === "identity_pan_level") {
+    const others = c3.facts.filter(f => f.startsWith("search.")).map(f => j.evidence.find(e => e.fact_id === f)).filter(Boolean);
+    if (others.length) html += "<h2 style='margin-top:10px'>Other GSTINs under this PAN</h2>" +
+      others.map(e => `<div class="row">${link(e)} <span class="muted">${esc(e.source)}</span></div>`).join("");
+  }
+  return html;
+}
+
 function render(j) {
   last = j;
   $("mock").style.display = j.mock ? "block" : "none";
@@ -124,7 +150,9 @@ function render(j) {
         `<div class="row"><b>${r.check}</b> <code>${esc(r.rule_id)}</code> ${r.facts.map(f => `· ${esc(f.fact_id)} = ${esc(f.value)}`).join(" ")}</div>`).join("") : ""}
       ${card.gaps.length ? "<h2 style='margin-top:10px'>Gaps</h2>" + card.gaps.map(g =>
         `<div class="row muted"><b>${g.check}</b> ${esc(g.missing)}${g.sources_tried.length ? " · tried " + esc(g.sources_tried.join(", ")) : ""}</div>`).join("") : ""}
-      ${card.notes.length ? "<h2 style='margin-top:10px'>Notes</h2>" + card.notes.map(n => `<div class="row">${esc(n)}</div>`).join("") : ""}`;
+      ${card.notes.length ? "<h2 style='margin-top:10px'>Notes</h2>" + card.notes.map(n => `<div class="row">${esc(n)}</div>`).join("") : ""}
+      ${candidatesHTML(j)}`;
+    document.querySelectorAll(".cand-fact").forEach(el => el.onclick = () => showSource(j.evidence.find(e => e.evidence_id == el.dataset.id)));
   } else $("card").innerHTML = "";
 
   const live = j.approvals.filter(a => !a.void), voided = j.approvals.filter(a => a.void);

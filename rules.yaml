@@ -7,8 +7,10 @@ providers:
   crustdata:
     enabled: true
     api_version: "2025-11-01"
-    # Real Enrich group names (docs.crustdata.com). c5 "activity" = web_traffic + hiring + news.
-    enrich_groups: [basic_info, revenue, people, news, web_traffic, hiring]
+    # Real Enrich group names (docs.crustdata.com), asked for in the one Enrich call per job. c5 "activity" =
+    # hiring + news (+ the website, checked directly). Left out: people (would store employee names; c7 screens
+    # only the directors given) and web_traffic (keyed by domain, so no field path the validator can follow).
+    enrich_groups: [basic_info, revenue, news, hiring]
     # Set by hand from logs/probe_crustdata_endpoints.json (python -m cc.crustdata).
     # A test checks these against the probe. Unknown until the probe runs.
     rungs:
@@ -17,7 +19,7 @@ providers:
       web_search: true
       web_fetch: true
       person_search: true
-  sanctions: { enabled: true }
+  sanctions: { enabled: true }      # OpenSanctions; needs OPENSANCTIONS_API_KEY, else c7 lists it as a gap
 
 required_checks: [c1, c2, c3, c4, c9]
 hard_fails: [gst_cancelled, gst_suspended, struck_off]
@@ -26,7 +28,16 @@ thresholds:
   fuzzy_cutoff: 0.9
   anchors_to_refer: 2
   min_age_months: 6
-  max_candidates: 5
+  max_candidates: 5                # PANs kept from discovery
+  gst_tries_per_pan: 2             # GST calls per PAN in discovery, until one is Active
+  activity_months: 12              # c5: news newer than this counts as activity
+  stale_after_months: 12           # c6: a GST record not updated for this long is a gap
+  news_months: 36                  # c7: Web Search start_date, this far back from the job's day
+
+# c7: a passage is a hit only if it names the director and has one of these terms. Anchors tie it to our director.
+signals:
+  adverse_terms: [fraud, cheating, arrested, FIR, scam, "money laundering", chargesheet, absconding, "wilful defaulter", sanctioned]
+  roles: [director, "managing director", proprietor, partner, owner, founder, ceo]
 
 prices_inr:
   cashfree_gstin: 1.00             # TODO price: confirm from the provider's price list

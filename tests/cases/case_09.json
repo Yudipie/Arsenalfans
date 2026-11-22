@@ -22,6 +22,10 @@
     "gst.status"
   ],
   "derived_from": null,
-  "evidence_note": "CIN U60200RJ2011PTC035171, directors incl. Rajesh Kumar DIN 03521433 (tofler.in, zaubacorp.com). GSTIN not found yet: discovery, or confirm by hand. Namesakes must raise no flag.",
-  "status": "unconfirmed"
+  "evidence_note": "CIN U60200RJ2011PTC035171, PAN AAFCR1929K, directors incl. Rajesh Kumar DIN 03521433 (tofler.in, zaubacorp.com). GSTIN not found: the live discovery search (logs/probe_crustdata_websearch_case9.json) returns no 08AAFCR1929K GSTIN, so discovery gives Cannot verify. Pending until the GSTIN is confirmed by a GST lookup by PAN, then added to the request. Namesakes must raise no flag.",
+  "status": "unconfirmed",
+  "needs": [
+    "c7",
+    "confirmed_gstin"
+  ]
 }

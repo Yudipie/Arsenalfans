@@ -7,10 +7,11 @@ import hashlib
 import json
 import os
 import time
+from urllib.parse import urlparse
 
-from cc import checks, output, sources, store
+from cc import checks, output, resolve, sources, store
 from cc.core import LOGS, CheckResult, OnboardingRecord, Request, load_rules, rules_hash
-from cc.intake import check_formats, record_from_request, scrub_request
+from cc.intake import check_formats, pan_from_gstin, record_from_request, scrub_request
 
 STEPS = ["intake", "formats", "resolve", "gather", "checks", "decide", "output"]
 
@@ -35,9 +36,11 @@ def step_intake(job, done):
     req = Request(**json.loads(job["request"]))
     rec = record_from_request(job["job_id"], req)
 
+    pan = rec.vendor.pan or (pan_from_gstin(rec.vendor.gstin) if rec.vendor.gstin else None)
+
     def extra(c):
         c.execute("UPDATE jobs SET record=?, gstin=?, pan=?, bank_hash=? WHERE job_id=?",
-                  (rec.model_dump_json(), rec.vendor.gstin, rec.vendor.pan, rec.bank.account_hash, job["job_id"]))
+                  (rec.model_dump_json(), rec.vendor.gstin, pan, rec.bank.account_hash, job["job_id"]))
     return rec.model_dump(), extra
 
 
@@ -46,39 +49,90 @@ def step_formats(job, done):
     return {"c1": c1.model_dump(), "parse_notes": notes}, None
 
 
+def _validated(facts: list[dict]) -> tuple[list[dict], list[dict]]:
+    responses = {f["call_id"]: json.loads(store.call_by_id(f["call_id"])["response"]) for f in facts}
+    return checks.validate(facts, responses)
+
+
 def step_resolve(job, done):
-    if done["formats"]["c1"]["result"] != "pass":
-        return {"gstins": [], "note": "c1 did not pass: no paid call"}, None
-    return {"gstins": [done["intake"]["vendor"]["gstin"]]}, None
+    """Given GSTIN: hand it on (plus Crustdata identity). No GSTIN: discovery, name -> GSTINs -> one PAN."""
+    rules = load_rules()
+    out = resolve.resolve(job["job_id"], done["intake"], done["formats"]["c1"], rules,
+                          lambda: _over_limits(store.job(job["job_id"]), rules))
+    kept, dropped = _validated(out.pop("facts"))
+    out.update(kept=len(kept), dropped=len(dropped))
+    return out, (lambda c: store.add_evidence(c, job["job_id"], kept)) if kept else None
 
 
 def step_gather(job, done):
     gstins = done["resolve"]["gstins"]
     if not gstins:
-        return {"skipped": done["resolve"].get("note", "no GSTIN to look up"), "dropped": 0}, None
+        return {"skipped": done["resolve"].get("note") or "no single GSTIN to look up", "dropped": 0}, None
     limit = _over_limits(store.job(job["job_id"]), load_rules())
     if limit:
         return {"skipped": limit, "dropped": 0}, None
+    job_id, bank = job["job_id"], done["intake"]["bank"]
     facts, tried, unavailable = [], [], False
     for g in gstins:
         try:
-            facts += sources.gst_lookup(job["job_id"], g)
+            facts += sources.gst_lookup(job_id, g)
         except sources.SourceUnavailable as e:
             tried, unavailable = e.sources_tried, True
-    responses = {f["call_id"]: json.loads(store.call_by_id(f["call_id"])["response"]) for f in facts}
-    kept, dropped = checks.validate(facts, responses)
-    tried = tried or sorted({f["source"] for f in kept})
-    return ({"sources_tried": tried, "unavailable": unavailable, "kept": len(kept), "dropped": len(dropped)},
-            lambda c: store.add_evidence(c, job["job_id"], kept))
+    gst_tried = tried or sorted({f["source"] for f in facts})
+    ifsc_tried, ifsc_unavailable = load_rules()["providers"]["ifsc"], False
+    if bank.get("ifsc"):
+        try:
+            facts += sources.ifsc_lookup(job_id, bank["ifsc"])
+        except sources.SourceUnavailable as e:
+            ifsc_tried, ifsc_unavailable = e.sources_tried, True
+    gstin = gstins[0]
+    facts += sources.vendor_master_facts(job_id, gstin, pan_from_gstin(gstin))
+    facts += sources.earlier_job_facts(job_id, gstin, pan_from_gstin(gstin))
+    # c5/c6: the website Crustdata lists, live or not, and its domain age. Free, best effort.
+    site_tried, website = [], done["resolve"].get("website")
+    if website:
+        domain = urlparse(website if "//" in website else f"http://{website}").hostname or ""
+        for fn, arg in ((sources.site_facts, website), (sources.rdap_facts, domain.removeprefix("www."))):
+            try:
+                facts += fn(job_id, arg)
+                site_tried.append(fn.__name__.removesuffix("_facts"))
+            except sources.SourceUnavailable:
+                pass
+    # c7: directors' names come from the stored request only; the record and this output never hold them.
+    rules = load_rules()
+    directors = (json.loads(job["request"]).get("fields") or {}).get("directors") or []
+    day = int(store.job(job_id)["created_at"] // 86400 * 86400)
+    people = resolve.screen_directors(job_id, directors, done["intake"], rules, day,
+                                      lambda: _over_limits(store.job(job_id), rules))
+    facts += people.pop("facts")
+    purge = people.pop("purge")
+    kept, dropped = _validated(facts)
+
+    def extra(c):
+        store.add_evidence(c, job_id, kept)
+        store.purge_calls(c, purge)
+    return ({"sources_tried": gst_tried, "unavailable": unavailable, "ifsc_tried": ifsc_tried,
+             "ifsc_unavailable": ifsc_unavailable, "site_tried": site_tried, "people": people,
+             "kept": len(kept), "dropped": len(dropped)}, extra)
 
 
 def step_checks(job, done):
+    rules, ev, rec = load_rules(), store.evidence(job["job_id"]), done["intake"]
+    c1 = CheckResult(**done["formats"]["c1"])
+    gstins = done["resolve"]["gstins"]
+    if c1.rule_id == "gstin_missing" and gstins:  # discovery found the GSTIN: check its format now
+        found = OnboardingRecord(**{**rec, "vendor": {**rec["vendor"], "gstin": gstins[0]}})
+        c1, _ = check_formats(found)
+    gstin = gstins[0] if gstins else None
     results = [
-        CheckResult(**done["formats"]["c1"]),
-        checks.c2(store.evidence(job["job_id"]), done["gather"]),
-        checks.not_built("c3", 2),
-        checks.not_built("c4", 2),
-        checks.not_built("c9", 2),
+        c1,
+        checks.c2(ev, done["gather"]),
+        checks.c3(ev, done["resolve"], rec, rules),
+        checks.c4(ev, done["gather"], rec, gstin, rules),
+        checks.c9(ev, done["gather"], rec, gstin, rules),
+        checks.c5(ev, done["gather"], rules),
+        checks.c6(ev, done["gather"], rec, rules),
+        checks.c7(done["gather"], rules),
     ]
     return {"results": [r.model_dump() for r in results]}, None
 

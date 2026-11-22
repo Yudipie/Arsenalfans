@@ -108,6 +108,16 @@ def steps(job_id: str) -> list[dict]:
     return _all("SELECT name, status, started_at, finished_at FROM steps WHERE job_id=? ORDER BY finished_at", job_id)
 
 
+def jobs_matching(job_id: str, gstin: str | None, pan: str | None) -> list[dict]:
+    """Other decided jobs with this GSTIN or PAN (c4, E20). The name comes from the masked record."""
+    rows = _all("""SELECT job_id, gstin, pan, bank_hash, record FROM jobs WHERE job_id != ?
+                   AND status = 'awaiting_approval' AND ((gstin IS NOT NULL AND gstin = ?) OR (pan IS NOT NULL AND pan = ?))
+                   ORDER BY created_at""", job_id, gstin, pan)
+    for r in rows:
+        r["name"] = json.loads(r.pop("record") or "{}").get("vendor", {}).get("name_as_written")
+    return rows
+
+
 def start_job(job_id: str, resumed_at: str | None) -> None:
     with tx() as c:
         if resumed_at:
@@ -183,6 +193,14 @@ def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: 
     with tx() as c:
         c.execute("UPDATE calls SET response=?, status=?, cost_inr=?, mock=?, finished_at=? WHERE call_key=?",
                   (json.dumps(response, default=str), status, cost_inr, int(mock), time.time(), call_key))
+
+
+def purge_calls(c: sqlite3.Connection, call_ids: list[int]) -> None:
+    """c7, nothing tied a person to our director (E26): drop the request (it holds the name) and the response.
+    The row stays for cost; its key is freed, so another job asks afresh instead of reusing an empty answer."""
+    for cid in call_ids:
+        c.execute("""UPDATE calls SET call_key='purged:' || call_id, request='null', response='{"purged": true}'
+                     WHERE call_id=?""", (cid,))
 
 
 def job_calls(job_id: str) -> list[dict]:

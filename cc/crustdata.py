@@ -1,10 +1,12 @@
-"""Crustdata API (version 2025-11-01). Phase 0: account endpoints, Identify, Enrich, and the probe.
+"""Crustdata API (version 2025-11-01): account endpoints, Identify, Enrich, Web Search, Web Fetch, and the probe.
 
-Phase 2 routes these through sources.call() and adds Web Search / Web Fetch; phase 4 adds Person Search.
+PROVIDERS are the call()-ready versions: each returns {"body", "credits"} and raises RungOff on a 403.
+Person Search is not wired: it can't raise a c7 signal on its own (phase 4 decision).
 Probe: `uv run python -m cc.crustdata` (spends credits: 1 Identify call + 1 Enrich call).
 """
 import json
 import os
+import time
 
 import httpx
 
@@ -78,6 +80,39 @@ def enrich(company_ids: list[int], fields: list[str]) -> tuple[list, float]:
                    json={"crustdata_company_ids": company_ids, "fields": fields}, timeout=60)
     r.raise_for_status()
     return r.json(), _credits(r)
+
+
+# --- call()-ready providers (phase 2) ---
+
+def _post(path: str, body: dict) -> dict:
+    from cc.sources import RungOff  # sources imports nothing from here; local import keeps it that way
+
+    r = httpx.post(f"{BASE}{path}", headers=_headers(), json=body, timeout=30)
+    if r.status_code == 403:
+        raise RungOff(path)
+    if r.status_code == 429:  # rate limited: wait it out, then let call()'s one retry go
+        time.sleep(min(float(r.headers.get("retry-after") or 2), 5))
+    r.raise_for_status()
+    return {"body": r.json(), "credits": _credits(r)}
+
+
+PROVIDERS = {
+    "crustdata_identify": lambda names: _post("/company/identify", {"names": names}),
+    "crustdata_enrich": lambda company_ids, fields: _post(
+        "/company/enrich", {"crustdata_company_ids": company_ids, "fields": fields}),
+    # start_date: unix seconds (docs: Web Search reference). c7 passes the job's day, so the call key is stable.
+    "crustdata_web_search": lambda query, start_date=None, sources=("web",): _post(
+        "/web/search/live", {"query": query, "sources": list(sources), "location": "IN",
+                             **({"start_date": start_date} if start_date else {})}),
+    "crustdata_web_fetch": lambda urls: _post("/web/enrich/live", {"urls": urls}),
+}
+PROVIDER_RUNG = {"crustdata_identify": "identify", "crustdata_enrich": "enrich",
+                 "crustdata_web_search": "web_search", "crustdata_web_fetch": "web_fetch"}
+
+
+def rung_on(provider: str) -> bool:
+    cd = load_rules()["providers"]["crustdata"]
+    return bool(cd.get("enabled")) and bool(cd["rungs"].get(PROVIDER_RUNG[provider]))
 
 
 def enabled_rungs(endpoints: dict) -> dict:

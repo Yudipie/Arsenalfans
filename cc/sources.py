@@ -1,5 +1,6 @@
 """Outside calls: the call() wrapper, GST providers (fixture, Cashfree), the vendor-master reader,
-and the phase-0 Haiku/GST probes. IFSC, OpenSanctions, RDAP and MCA arrive in phases 2 and 4.
+IFSC, earlier jobs, the website check, RDAP, OpenSanctions, and the phase-0 Haiku/GST probes. MCA is not wired
+(no data.gov.in key).
 Probe: `uv run python -m cc.sources` writes logs/probe_haiku.json and logs/probe_gst_live.json.
 """
 import copy
@@ -64,6 +65,209 @@ GST_FIXTURES = {
         "valid": True,
         "message": "GSTIN Exists",
     },
+    # Phase 2 seeds, from public GST lookup pages (case evidence_notes); confirm live before stage.
+    # Case 3: proprietorship, matched on the trade name. Owner's legal name withheld: personal data.
+    "23AKHPK8071C1ZE": {
+        "reference_id": 1003,
+        "GSTIN": "23AKHPK8071C1ZE",
+        "legal_name_of_business": "[personal]",
+        "trade_name_of_business": "ASHIRWAD ROADWAYS",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Proprietorship",
+        "date_of_registration": "2017-07-01",
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Madhya Pradesh", "district": "Indore"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    # Case 1: VRL, PAN AABCV3609C. The main GSTIN is Active; a second Karnataka GSTIN is cancelled.
+    "29AABCV3609C1ZJ": {
+        "reference_id": 1011,
+        "GSTIN": "29AABCV3609C1ZJ",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Karnataka", "district": "Dharwad"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "29AABCV3609C2ZI": {
+        "reference_id": 1012,
+        "GSTIN": "29AABCV3609C2ZI",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Cancelled",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Karnataka", "district": "Dharwad"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    # Case 5: two unrelated Mumbai proprietorships trading as Shree Ganesh Roadlines.
+    "27AXEPG3338E1ZR": {
+        "reference_id": 1051,
+        "GSTIN": "27AXEPG3338E1ZR",
+        "legal_name_of_business": "[personal]",
+        "trade_name_of_business": "SHREE GANESH ROADLINES",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Proprietorship",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Maharashtra", "district": "Mumbai"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "27AOHPP0337G1Z0": {
+        "reference_id": 1052,
+        "GSTIN": "27AOHPP0337G1Z0",
+        "legal_name_of_business": "[personal]",
+        "trade_name_of_business": "SHREE GANESH ROADLINES",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Proprietorship",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Maharashtra", "district": "Mumbai"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    # Seen in live Crustdata Web Search ("<name> GST number", 22 Nov 2026). Names from the result titles;
+    # status and district are NOT verified: confirm with a live GST key. Other VRL state registrations:
+    "22AABCV3609C1ZX": {
+        "reference_id": 1013,
+        "GSTIN": "22AABCV3609C1ZX",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Chhattisgarh", "district": "Raipur"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "10AABCV3609C1Z2": {
+        "reference_id": 1014,
+        "GSTIN": "10AABCV3609C1Z2",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Bihar", "district": "Patna"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "27AABCV3609C1ZN": {
+        "reference_id": 1015,
+        "GSTIN": "27AABCV3609C1ZN",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Maharashtra", "district": "Mumbai"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "36AABCV3609C1ZO": {
+        "reference_id": 1016,
+        "GSTIN": "36AABCV3609C1ZO",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Telangana", "district": "Hyderabad"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "09AABCV3609C1ZL": {
+        "reference_id": 1017,
+        "GSTIN": "09AABCV3609C1ZL",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Uttar Pradesh", "district": "Lucknow"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "37AABCV3609C1ZM": {
+        "reference_id": 1018,
+        "GSTIN": "37AABCV3609C1ZM",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Andhra Pradesh", "district": "Vijayawada"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "23AABCV3609C1ZV": {
+        "reference_id": 1019,
+        "GSTIN": "23AABCV3609C1ZV",
+        "legal_name_of_business": "VRL LOGISTICS LIMITED",
+        "trade_name_of_business": "VRL LOGISTICS LIMITED",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Public Limited Company",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Madhya Pradesh", "district": "Indore"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    # Shree Ganesh lookalikes the live search returns (two more PANs trading under near-identical names):
+    "24ANWPP5595N2ZR": {
+        "reference_id": 1053,
+        "GSTIN": "24ANWPP5595N2ZR",
+        "legal_name_of_business": "[personal]",
+        "trade_name_of_business": "SHREE GANESH ROADLINES",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Proprietorship",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Gujarat", "district": "Ahmedabad"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
+    "07BVSPS5329G1ZZ": {
+        "reference_id": 1054,
+        "GSTIN": "07BVSPS5329G1ZZ",
+        "legal_name_of_business": "[personal]",
+        "trade_name_of_business": "SHRI GANESH ROADLINES",
+        "gst_in_status": "Active",
+        "taxpayer_type": "Regular",
+        "constitution_of_business": "Proprietorship",
+        "date_of_registration": None,
+        "last_update_date": None,
+        "principal_place_split_address": {"state": "Delhi", "district": "New Delhi"},
+        "valid": True,
+        "message": "GSTIN Exists",
+    },
 }
 
 
@@ -99,6 +303,10 @@ GST_FIELDS = {
     "gst.cancelled_on": "date_of_cancellation",
     "gst.updated_on": "last_update_date",
 }
+
+
+class RungOff(Exception):
+    """A 403 from a source: the key doesn't have this rung. Not retried, no fallback."""
 
 
 class SourceUnavailable(Exception):
@@ -137,18 +345,29 @@ def call(job_id: str, providers: list[str], request: dict, fns: dict) -> tuple[d
             store.call_started(key, p, request, job_id)
             try:
                 resp = fns[p](**request)
+            except RungOff as e:
+                store.call_finished(key, {"error": repr(e)}, 0.0, False, status="error")
+                raise
             except Exception as e:  # timeout, HTTP error, fixture refused
                 store.call_finished(key, {"error": repr(e)}, 0.0, p == "fixture", status="error")
                 continue
             _step_delay()
-            store.call_finished(key, resp, prices.get(PRICE_KEYS.get(p), 0.0), p == "fixture")
+            # Crustdata providers return {"body", "credits"}: priced from the X-Credits-Used header.
+            if isinstance(resp, dict) and "credits" in resp and "body" in resp:
+                cost = resp["credits"] * prices.get("crustdata_credit", 0.0)
+            else:
+                cost = prices.get(PRICE_KEYS.get(p), 0.0)
+            store.call_finished(key, resp, cost, p == "fixture")
             return store.call_row(key), resp
     raise SourceUnavailable(tried)
 
 
 def get_path(data, path: str):
-    """Dotted field path into a stored response. Raises KeyError if absent."""
+    """Dotted field path into a stored response; a numeric part indexes a list. Raises KeyError if absent."""
     for part in path.split("."):
+        if isinstance(data, list) and part.isdigit() and int(part) < len(data):
+            data = data[int(part)]
+            continue
         if not isinstance(data, dict) or part not in data:
             raise KeyError(path)
         data = data[part]
@@ -159,28 +378,133 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="seconds")
 
 
-def gst_lookup(job_id: str, gstin: str) -> list[dict]:
-    """GST status for one GSTIN, normalised to facts that each point at a field in the stored response."""
-    row, resp = call(job_id, load_rules()["providers"]["gst"], {"gstin": gstin}, GST_PROVIDERS)
-    facts = []
-    for fact_id, path in GST_FIELDS.items():
+def fact(row: dict, fact_id: str, value, field_path: str | None = None, quote: str | None = None,
+         source: str | None = None, updated_at: str | None = None) -> dict:
+    """One evidence item pointing at a stored calls row."""
+    return {"fact_id": fact_id, "value": value, "source": source or row["provider"], "field_path": field_path,
+            "quote": quote, "retrieved_at": _iso(row["finished_at"]), "record_updated_at": updated_at,
+            "call_id": row["call_id"], "mock": bool(row["mock"])}
+
+
+def _facts_from(row: dict, resp: dict, fields: dict, prefix: str, source: str, updated_at=None) -> list[dict]:
+    out = []
+    for name, path in fields.items():
         try:
             value = get_path(resp, path)
         except KeyError:
             continue
-        if value is None:
-            continue
-        facts.append({"fact_id": fact_id, "value": value, "source": f"{row['provider']}_gstin", "field_path": path,
-                      "quote": None, "retrieved_at": _iso(row["finished_at"]),
-                      "record_updated_at": resp.get("last_update_date"), "call_id": row["call_id"],
-                      "mock": bool(row["mock"])})
-    return facts
+        if value is not None:
+            out.append(fact(row, f"{prefix}.{name}", value, path, source=source, updated_at=updated_at))
+    return out
+
+
+def gst_lookup(job_id: str, gstin: str, prefix: str = "gst") -> list[dict]:
+    """GST status for one GSTIN, normalised to facts that each point at a field in the stored response.
+    Discovery candidates use prefix "cand.<GSTIN>" so they never collide with the resolved GSTIN's gst.* facts."""
+    row, resp = call(job_id, load_rules()["providers"]["gst"], {"gstin": gstin}, GST_PROVIDERS)
+    fields = {k.split(".", 1)[1]: v for k, v in GST_FIELDS.items()}
+    return _facts_from(row, resp, fields, prefix, f"{row['provider']}_gstin", resp.get("last_update_date"))
+
+
+# --- IFSC (c9): the free public lookup at ifsc.razorpay.com, not Razorpay payments ---
+
+def ifsc_razorpay(ifsc: str) -> dict:
+    r = httpx.get(f"https://ifsc.razorpay.com/{ifsc}", timeout=10)
+    if r.status_code == 404:
+        return {"IFSC": ifsc, "found": False}
+    r.raise_for_status()
+    return {**r.json(), "found": True}
+
+
+IFSC_PROVIDERS = {"razorpay_ifsc": ifsc_razorpay}
+IFSC_FIELDS = {"found": "found", "bank": "BANK", "branch": "BRANCH", "city": "CITY", "state": "STATE"}
+
+
+def ifsc_lookup(job_id: str, ifsc: str) -> list[dict]:
+    row, resp = call(job_id, load_rules()["providers"]["ifsc"], {"ifsc": ifsc}, IFSC_PROVIDERS)
+    return _facts_from(row, resp, IFSC_FIELDS, "ifsc", row["provider"])
+
+
+# --- vendor master and earlier jobs (c4): free, routed through call() so facts have a stored response ---
+
+VENDOR_MASTER = ROOT / "data" / "vendor_master.csv"
 
 
 def read_vendor_master() -> list[dict]:
     """Read fresh on every job; never cached."""
-    with (ROOT / "data" / "vendor_master.csv").open() as f:
+    with VENDOR_MASTER.open() as f:
         return list(csv.DictReader(f))
+
+
+def _vendor_master(sha256: str) -> dict:
+    return {"sha256": sha256, "rows": {r["vendor_id"]: r for r in read_vendor_master()}}
+
+
+def _earlier_jobs(job_id: str, gstin: str | None, pan: str | None) -> dict:
+    """Other decided jobs with the same GSTIN or PAN. This job is left out."""
+    rows = store.jobs_matching(job_id, gstin, pan)
+    return {"jobs": {r["job_id"]: {"gstin": r["gstin"], "pan": r["pan"], "bank_hash": r["bank_hash"],
+                                   "name": r["name"]} for r in rows}}
+
+
+LOCAL_PROVIDERS = {"vendor_master": _vendor_master, "earlier_jobs": _earlier_jobs}
+
+
+def vendor_master_facts(job_id: str, gstin: str | None, pan: str | None) -> list[dict]:
+    """Rows sharing this GSTIN or PAN. The request is the CSV's sha256, so an edited file is a new snapshot (E37)."""
+    sha = hashlib.sha256(VENDOR_MASTER.read_bytes()).hexdigest()
+    row, resp = call(job_id, ["vendor_master"], {"sha256": sha}, LOCAL_PROVIDERS)
+    return [fact(row, f"vendor_master.{vid}", r, f"rows.{vid}") for vid, r in resp["rows"].items()
+            if (gstin and r["gstin"] == gstin) or (pan and r["pan"] == pan)]
+
+
+def earlier_job_facts(job_id: str, gstin: str | None, pan: str | None) -> list[dict]:
+    row, resp = call(job_id, ["earlier_jobs"], {"job_id": job_id, "gstin": gstin, "pan": pan}, LOCAL_PROVIDERS)
+    return [fact(row, f"earlier_job.{jid}", j, f"jobs.{jid}") for jid, j in resp["jobs"].items()]
+
+
+# --- phase 4 signals: is the website live (c5), domain age by RDAP (c6), OpenSanctions (c7). All free ---
+
+def _site_check(url: str) -> dict:
+    """One GET. A dead site is an answer (live false), not an error, so it isn't retried."""
+    try:
+        r = httpx.get(url, timeout=10, follow_redirects=True)
+        return {"url": url, "status_code": r.status_code, "live": r.status_code < 400}
+    except httpx.HTTPError as e:
+        return {"url": url, "status_code": None, "live": False, "error": type(e).__name__}
+
+
+def _rdap(domain: str) -> dict:
+    r = httpx.get(f"https://rdap.org/domain/{domain}", timeout=15, follow_redirects=True)
+    if r.status_code == 404:
+        return {"domain": domain, "found": False}
+    r.raise_for_status()
+    return {**r.json(), "found": True}
+
+
+def _opensanctions(name: str) -> dict:
+    r = httpx.get("https://api.opensanctions.org/search/default", params={"q": name, "schema": "Person", "limit": 10},
+                  headers={"Authorization": f"ApiKey {os.environ['OPENSANCTIONS_API_KEY']}"}, timeout=15)
+    if r.status_code in (401, 403):
+        raise RungOff("opensanctions")
+    r.raise_for_status()
+    return r.json()
+
+
+SIGNAL_PROVIDERS = {"site_check": _site_check, "rdap": _rdap, "opensanctions": _opensanctions}
+
+
+def site_facts(job_id: str, url: str) -> list[dict]:
+    row, resp = call(job_id, ["site_check"], {"url": url}, SIGNAL_PROVIDERS)
+    return _facts_from(row, resp, {"live": "live", "url": "url"}, "site", row["provider"])
+
+
+def rdap_facts(job_id: str, domain: str) -> list[dict]:
+    row, resp = call(job_id, ["rdap"], {"domain": domain}, SIGNAL_PROVIDERS)
+    for i, ev in enumerate(resp.get("events") or []):
+        if ev.get("eventAction") == "registration" and ev.get("eventDate"):
+            return [fact(row, "rdap.registered_on", ev["eventDate"], f"events.{i}.eventDate")]
+    return []
 
 
 def _save(name: str, data: dict) -> None:
