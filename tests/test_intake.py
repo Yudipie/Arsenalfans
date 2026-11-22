@@ -212,3 +212,11 @@ def test_scrub_drops_account_number_and_aadhaar():
     assert out["fields"]["account_last4"] == "5678"
     assert out["fields"]["account_hash"] == account_hash("50100012345678")
     assert "2345 6789 0124" not in scrub_request(load_case(8)["request"])["text"]
+
+
+def test_scrub_masks_phone_and_account_in_text_but_keeps_gstin_and_ifsc():
+    req = {**load_case(8)["request"], "text": "A/c 50100123456789, call +91 98765 43210 or 9876543210. "
+                                             "GST 23AKHPK8071C1ZE, IFSC SBIN0030010"}
+    t = scrub_request(req)["text"]
+    assert "50100123456789" not in t and "98765 43210" not in t and "9876543210" not in t
+    assert "23AKHPK8071C1ZE" in t and "SBIN0030010" in t

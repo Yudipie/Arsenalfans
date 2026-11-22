@@ -40,6 +40,8 @@ def account_hash(account_number: str) -> str:
 
 _IFSC_RE = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$")
 _AADHAAR_RE = re.compile(r"\b[2-9]\d{3}\s?\d{4}\s?\d{4}\b")
+_PHONE_RE = re.compile(r"(?<![\w+])(?:\+?91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}\b")  # Indian mobile
+_ACCOUNT_RE = re.compile(r"\b\d{9,18}\b")  # bank account numbers are 9-18 digits
 _DIGIT_POSITIONS = (0, 1, 7, 8, 9, 10)  # where a GSTIN must have a digit
 PAN_HOLDER_TYPES = {"C": "company", "P": "person", "H": "HUF", "F": "firm", "A": "AOP", "T": "trust",
                     "B": "BOI", "L": "local authority", "J": "artificial juridical person", "G": "government"}
@@ -58,14 +60,16 @@ GST_STATES = {
 
 def scrub_request(req: dict) -> dict:
     """Runs before anything is stored. The raw account number becomes hash + last 4; Aadhaar-shaped numbers
-    are dropped from pasted text. Phase 3 adds phone, address and name masking."""
+    are dropped from pasted text, and phone- and account-shaped ones masked. Phase 3 adds address and name masking."""
     req = {**req, "fields": dict(req.get("fields") or {})}
     f = req["fields"]
     if f.get("account_number"):
         digits = re.sub(r"\D", "", f.pop("account_number"))
         f["account_hash"], f["account_last4"] = account_hash(digits), digits[-4:]
     if req.get("text"):
-        req["text"] = _AADHAAR_RE.sub("[aadhaar removed]", req["text"])
+        t = _AADHAAR_RE.sub("[aadhaar removed]", req["text"])
+        t = _PHONE_RE.sub("[phone masked]", t)
+        req["text"] = _ACCOUNT_RE.sub("[account masked]", t)
     return req
 
 

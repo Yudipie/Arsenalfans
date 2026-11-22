@@ -255,3 +255,70 @@ def test_approve_twice_gives_one_row_and_edit_voids_it(db):
     assert [a["void"] for a in store.approvals(job_id)] == [1]
     worker.run_job(job_id)
     assert current_hash(job_id) != h
+
+
+def test_stored_mock_call_is_not_reused_with_mock_off(db, monkeypatch):
+    run_case(2)
+    monkeypatch.setenv("MOCK", "0")
+    with pytest.raises(sources.SourceUnavailable):
+        sources.call("j", ["fixture"], {"gstin": load_case(2)["request"]["fields"]["gstin"]}, sources.GST_PROVIDERS)
+
+
+def test_edit_refused_unless_finished(db):
+    job_id = worker.submit(load_case(2)["request"])
+    req = json.loads(store.job(job_id)["request"])
+    assert store.edit(job_id, req) is False
+    store.start_job(job_id, None)
+    assert store.edit(job_id, req) is False
+    assert store.job(job_id)["status"] == "running"
+
+
+def test_edit_and_resume_restart_the_time_limit(db):
+    job_id, _ = run_case(2)
+    with store.tx() as c:
+        c.execute("UPDATE jobs SET started_at=0 WHERE job_id=?", (job_id,))
+    assert store.edit(job_id, json.loads(store.job(job_id)["request"]))
+    assert store.job(job_id)["started_at"] is None and store.job(job_id)["resumes"] == "[]"
+    worker.run_job(job_id)
+    assert store.latest_verdict(job_id)["checks"][1]["result"] == "pass"
+    # A resume after a long kill: started_at is reset, so gather still runs.
+    with store.tx() as c:
+        c.execute("UPDATE jobs SET status='running', started_at=0 WHERE job_id=?", (job_id,))
+        c.execute("DELETE FROM steps WHERE job_id=? AND name IN ('gather','checks','decide','output')", (job_id,))
+        c.execute("DELETE FROM evidence WHERE job_id=?", (job_id,))
+    worker.run_job(job_id)
+    assert store.latest_verdict(job_id)["checks"][1]["result"] == "pass"
+
+
+def test_rules_change_voids_the_approval_hash(db, monkeypatch):
+    from cc import app
+    job_id, _ = run_case(2)
+    assert app._current_hash(job_id) == current_hash(job_id)
+    monkeypatch.setattr(app, "rules_hash", lambda: "changed")
+    assert app._current_hash(job_id) is None
+
+
+def test_a_failing_job_is_parked_and_the_queue_moves_on(db, monkeypatch):
+    bad = worker.submit(load_case(2)["request"])
+    good = worker.submit(load_case(4)["request"])
+    real_intake = worker.STEP_FNS["intake"]
+    monkeypatch.setitem(worker.STEP_FNS, "intake",
+                        lambda job, done: 1 / 0 if job["job_id"] == bad else real_intake(job, done))
+
+    def idle(s):  # the empty-queue poll ends the loop
+        if s == 0.2:
+            raise SystemExit
+    monkeypatch.setattr(worker.time, "sleep", idle)
+    with pytest.raises(SystemExit):
+        worker.main()
+    assert store.job(bad)["status"] == "error"
+    assert store.job(good)["status"] == "awaiting_approval"
+
+
+def test_reused_call_costs_this_job_nothing(db):
+    a, _ = run_case(2)
+    b = worker.submit({**load_case(2)["request"], "client_id": "other-client"})
+    worker.run_job(b)
+    [call] = store.job_calls(b)
+    assert call["reused"] and call["cost_inr"] == 0 and call["repeats"] == 0
+    assert not store.job_calls(a)[0]["reused"]

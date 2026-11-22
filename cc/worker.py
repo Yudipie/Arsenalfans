@@ -145,7 +145,11 @@ def main() -> None:
     while True:
         job = store.next_job()
         if job:
-            run_job(job["job_id"])
+            try:
+                run_job(job["job_id"])
+            except Exception as e:  # park the job so the queue keeps moving
+                store.fail_job(job["job_id"])
+                _log(event="error", job_id=job["job_id"], error=type(e).__name__)
         else:
             time.sleep(0.2)
 

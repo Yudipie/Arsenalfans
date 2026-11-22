@@ -120,12 +120,13 @@ def call(job_id: str, providers: list[str], request: dict, fns: dict) -> tuple[d
     """Every outside call goes through here. Returns (calls row, response).
 
     1. Key = sha256(provider + request). A stored response for any listed provider is reused, never refetched.
+       A stored mock response is reused only with MOCK=1.
     2. Otherwise try each provider in order (one fallback): timeout, 1 retry.
     3. The calls row is written before the request and finished after it, so a kill in flight is counted.
     """
     for p in providers:
         row = store.call_row(call_key(p, request))
-        if row and row["status"] == "done":
+        if row and row["status"] == "done" and (mock() or not row["mock"]):
             return row, json.loads(row["response"])
     prices = load_rules()["prices_inr"]
     tried = []

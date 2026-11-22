@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from cc import output, store
-from cc.core import ROOT, Request, mock
+from cc.core import ROOT, Request, mock, rules_hash
 from cc.intake import scrub_request
 from cc.worker import STEPS, submit
 
@@ -58,7 +58,8 @@ def _job_or_404(job_id: str) -> dict:
 def _current_hash(job_id: str) -> str | None:
     """Recomputed from what is stored now, never taken from the page."""
     v, job = store.latest_verdict(job_id), store.job(job_id)
-    if not v or job["status"] != "awaiting_approval":
+    # A verdict decided under other rules is stale: no hash, so nothing can be approved.
+    if not v or job["status"] != "awaiting_approval" or v["rules_hash"] != rules_hash():
         return None
     ids = [e["evidence_id"] for e in store.evidence(job_id)]
     return output.approval_hash(v["verdict"], ids, job["bank_hash"], v["rules_hash"])
@@ -100,7 +101,6 @@ def get_job(job_id: str):
         "job_id": job_id,
         "status": job["status"],
         "current_step": job["current_step"],
-        "request": json.loads(job["request"]),
         "record": json.loads(job["record"]) if job["record"] else None,
         "steps": [{"name": s, "done": s in {r["name"] for r in store.steps(job_id)}} for s in STEPS],
         "resumes": json.loads(job["resumes"]),
@@ -135,7 +135,8 @@ def edit(job_id: str, body: Edit):
         clean = scrub_request(Request(**req).model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(422, str(e))
-    store.edit(job_id, clean)
+    if not store.edit(job_id, clean):
+        raise HTTPException(409, "the job is still running; edit it once the verdict is out")
     return {"job_id": job_id}
 
 

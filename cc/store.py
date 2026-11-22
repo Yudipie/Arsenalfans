@@ -114,8 +114,14 @@ def start_job(job_id: str, resumed_at: str | None) -> None:
             resumes = json.loads(c.execute("SELECT resumes FROM jobs WHERE job_id=?", (job_id,)).fetchone()[0])
             resumes.append({"step": resumed_at, "at": time.time()})
             c.execute("UPDATE jobs SET resumes=? WHERE job_id=?", (json.dumps(resumes), job_id))
-        c.execute("UPDATE jobs SET status='running', started_at=COALESCE(started_at, ?) WHERE job_id=?",
-                  (time.time(), job_id))
+        # Reset on resume too: worker downtime after a kill doesn't count toward the time limit.
+        c.execute("UPDATE jobs SET status='running', started_at=? WHERE job_id=?", (time.time(), job_id))
+
+
+def fail_job(job_id: str) -> None:
+    """A step raised: status 'error', so next_job skips it. An edit queues it again."""
+    with tx() as c:
+        c.execute("UPDATE jobs SET status='error', finished_at=? WHERE job_id=?", (time.time(), job_id))
 
 
 def set_current(job_id: str, step: str) -> None:
@@ -132,14 +138,22 @@ def finish_step(job_id: str, name: str, output: dict, started_at: float, extra=N
                   (job_id, name, "done", json.dumps(output, default=str), started_at, time.time()))
 
 
-def edit(job_id: str, request: dict) -> None:
-    """New details: drop the steps and evidence, void approvals, queue again. Stored calls stay and are reused."""
+def edit(job_id: str, request: dict) -> bool:
+    """New details: drop the steps and evidence, void approvals, queue again. Stored calls stay and are reused.
+
+    Only a finished job (awaiting_approval or error) can be edited; a queued or running one is left alone and
+    False returned.
+    """
     with tx() as c:
-        c.execute("UPDATE jobs SET request=?, status='queued', current_step=NULL, finished_at=NULL WHERE job_id=?",
-                  (json.dumps(request), job_id))
+        n = c.execute("""UPDATE jobs SET request=?, status='queued', current_step=NULL, started_at=NULL,
+                         finished_at=NULL, resumes='[]' WHERE job_id=? AND status IN ('awaiting_approval','error')""",
+                      (json.dumps(request), job_id)).rowcount
+        if not n:
+            return False
         c.execute("DELETE FROM steps WHERE job_id=?", (job_id,))
         c.execute("DELETE FROM evidence WHERE job_id=?", (job_id,))
         c.execute("UPDATE approvals SET void=1 WHERE job_id=?", (job_id,))
+    return True
 
 
 # --- calls ---
@@ -172,9 +186,17 @@ def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: 
 
 
 def job_calls(job_id: str) -> list[dict]:
-    """Calls this job used: ones it made, plus stored ones its evidence points at."""
-    return _all("""SELECT * FROM calls WHERE job_id=? OR call_id IN (SELECT call_id FROM evidence WHERE job_id=?)
+    """Calls this job used: ones it made, plus stored ones its evidence points at.
+
+    A stored call another job made is marked reused, with cost and repeats 0: this job didn't pay for it.
+    """
+    rows = _all("""SELECT * FROM calls WHERE job_id=? OR call_id IN (SELECT call_id FROM evidence WHERE job_id=?)
                    ORDER BY call_id""", job_id, job_id)
+    for r in rows:
+        r["reused"] = r["job_id"] != job_id
+        if r["reused"]:
+            r["cost_inr"], r["repeats"] = 0.0, 0
+    return rows
 
 
 # --- evidence, verdicts, approvals ---
