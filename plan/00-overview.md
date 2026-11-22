@@ -16,7 +16,7 @@ Hackathon build: 2 builders (A, B), about 3 hours. Updated 22 November 2026. Rep
 | [4 Signals, cost, live fixes](phase-4-signals-cost.md) | 1:50–2:30 | c5, c6, c7 | cost, caps, redecide |
 | [5 Rehearse and demo](phase-5-rehearse-demo.md) | 2:30–3:00 | together | together |
 
-**Status (22 November 2026):** phases 0 and 1 are done. Phase 0's open items are the keys and carrier confirmation; phase 1's is a live GST run. Phases 2 and 3 are next, and can run in parallel.
+**Status (22 November 2026):** phases 0, 1 and 3 are done, and so is phase 4's B half (cost, limits, redecide). Phase 0's open items are the keys and carrier confirmation; phase 1's is a live GST run; phase 4-B still has the timed live-fix rehearsal. Phase 2 (A) and then 4-A are next.
 
 A phase is done only when:
 
@@ -108,6 +108,15 @@ Before a 3PL gives a load and money to a new carrier, someone has to prove the c
   - `CC_DB` sets the database path (the default is `logs/cc.sqlite`). Eval and the kill test give each run a new file.
   - `CC_STEP_DELAY` adds simulated latency per step and per call, so kills land mid-job.
 - **The approver card has no sentences yet.** It shows structured fields and `rule_id`s; the sentences come from `templates.yaml` in phase 3. There are no Verdict or Approval pydantic models: `serialize()` builds the verdict and approvals are plain rows. The verdict row is written in the output step.
+
+**Added in phases 3 and 4-B:** the full design decisions are in [phase-3-intake-cards.md](phase-3-intake-cards.md#design-decisions-as-built) and [phase-4-signals-cost.md](phase-4-signals-cost.md#b-design-decisions-as-built). In short:
+
+- Masking runs at submit. Flagged lines never reach the prompt. The parse uses `providers.parse: [haiku, fixture]`.
+- `templates.yaml` holds `en`, `hi`, `contest_*`, `ask_*` and `internal` per `rule_id`. `verdicts.card` is `{approver, vendor: {en, hi}, asks: {en, hi}}`.
+- **Contracts for A:**
+  - A provider function returns `(resp, {"credits": n})`.
+  - `call()` raises `OverLimit(rule_id)` before passing the cost cap or time limit. Checks read `gather["limit_rule"]`.
+  - Every new `rule_id` needs a `templates.yaml` entry.
 
 ## 4. Architecture
 

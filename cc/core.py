@@ -28,6 +28,11 @@ def rules_hash() -> str:
     return hashlib.sha256((ROOT / "rules.yaml").read_bytes()).hexdigest()
 
 
+def load_templates() -> dict:
+    """Card sentences, read fresh every time like the rules."""
+    return yaml.safe_load((ROOT / "templates.yaml").read_text(encoding="utf-8"))
+
+
 # --- contracts ---
 
 class Director(BaseModel):
@@ -83,6 +88,22 @@ class OnboardingRecord(BaseModel):
     language: Literal["en", "hi"] = "en"
     parse_notes: list[str] = []
     flagged_lines: list[str] = []
+    missing: list[str] = []
+    parse_failed: bool = False
+
+
+class ParsedText(BaseModel):
+    """What the Haiku parse of pasted text may return. Extraction only: it never sets a verdict."""
+    name: str | None = None
+    gstin: str | None = None
+    pan: str | None = None
+    state: str | None = None
+    city: str | None = None
+    ifsc: str | None = None
+    payee_name: str | None = None
+    contact_email: str | None = None
+    language: Literal["en", "hi"] = "en"
+    parse_notes: list[str] = []
     missing: list[str] = []
 
 

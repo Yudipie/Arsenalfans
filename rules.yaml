@@ -4,6 +4,8 @@ providers:
   # Tried in order, one fallback. "fixture" is allowed only with MOCK=1 (no GST key yet).
   gst: [fixture]
   ifsc: [razorpay_ifsc]            # the free public IFSC lookup, not Razorpay payments
+  # Haiku parse of pasted text. "fixture" answers only with MOCK=1 (rehearsal case 8) if Haiku fails.
+  parse: [haiku, fixture]
   crustdata:
     enabled: true
     api_version: "2025-11-01"

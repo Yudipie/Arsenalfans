@@ -166,6 +166,19 @@ def edit(job_id: str, request: dict) -> bool:
     return True
 
 
+def claim_redecide(job_id: str) -> bool:
+    """Only a finished job is redecided, by one request at a time. The worker never picks up a 'redeciding'
+    job and an edit is refused until it is handed back."""
+    with tx() as c:
+        return c.execute("UPDATE jobs SET status='redeciding' WHERE job_id=? AND status='awaiting_approval'",
+                         (job_id,)).rowcount == 1
+
+
+def release_redecide(job_id: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET status='awaiting_approval' WHERE job_id=? AND status='redeciding'", (job_id,))
+
+
 # --- calls ---
 
 def call_row(call_key: str) -> dict | None:
@@ -189,10 +202,12 @@ def call_started(call_key: str, provider: str, request: dict, job_id: str) -> No
             c.execute("UPDATE calls SET status='in_flight', started_at=? WHERE call_key=?", (time.time(), call_key))
 
 
-def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: str = "done") -> None:
+def call_finished(call_key: str, response, cost_inr: float, mock: bool, status: str = "done",
+                  tokens: tuple = (None, None)) -> None:
     with tx() as c:
-        c.execute("UPDATE calls SET response=?, status=?, cost_inr=?, mock=?, finished_at=? WHERE call_key=?",
-                  (json.dumps(response, default=str), status, cost_inr, int(mock), time.time(), call_key))
+        c.execute("""UPDATE calls SET response=?, status=?, cost_inr=?, mock=?, finished_at=?, tokens_in=?,
+                     tokens_out=? WHERE call_key=?""",
+                  (json.dumps(response, default=str), status, cost_inr, int(mock), time.time(), *tokens, call_key))
 
 
 def purge_calls(c: sqlite3.Connection, call_ids: list[int]) -> None:
@@ -243,10 +258,29 @@ def latest_verdict(job_id: str) -> dict | None:
 
 
 def approve(job_id: str, approval_hash: str, approved_by: str) -> None:
-    """Approving twice under the same hash leaves one row."""
+    """Approving twice under the same hash leaves one row. A row voided by an earlier redecide is made live
+    again (rules A -> B -> A brings back hash A)."""
     with tx() as c:
-        c.execute("INSERT OR IGNORE INTO approvals (job_id, approval_hash, approved_by, approved_at) VALUES (?,?,?,?)",
+        c.execute("INSERT INTO approvals (job_id, approval_hash, approved_by, approved_at) VALUES (?,?,?,?) "
+                  "ON CONFLICT (job_id, approval_hash) DO UPDATE SET void=0, approved_by=excluded.approved_by, "
+                  "approved_at=excluded.approved_at WHERE void=1",
                   (job_id, approval_hash, approved_by, time.time()))
+
+
+def verdicts(job_id: str) -> list[dict]:
+    """Every verdict for the job, oldest first; redecide adds rows so old and new can be compared."""
+    rows = _all("SELECT verdict_id, verdict, output, rules_hash, decided_at FROM verdicts WHERE job_id=? "
+                "ORDER BY verdict_id", job_id)
+    for r in rows:
+        out = json.loads(r.pop("output"))
+        r["reasons"] = [x["rule_id"] for x in out["reasons"]]
+        r["cost_inr"] = out["cost_inr"]
+    return rows
+
+
+def void_approvals_except(job_id: str, approval_hash: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE approvals SET void=1 WHERE job_id=? AND approval_hash<>?", (job_id, approval_hash))
 
 
 def approvals(job_id: str) -> list[dict]:

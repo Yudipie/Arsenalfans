@@ -253,9 +253,11 @@ def test_cancelled_gstin_rejects_citing_status_and_date(db):
     assert {f["fact_id"] for f in reason["facts"]} == {"gst.status", "gst.cancelled_on"}
 
 
-def test_bad_format_makes_no_call(db):
+@pytest.mark.phase3
+def test_bad_format_makes_no_gst_call(db):
     job_id, v = run_case(8)
-    assert v["verdict"] == "Cannot verify" and store.job_calls(job_id) == []
+    assert v["verdict"] == "Cannot verify"
+    assert [c for c in store.job_calls(job_id) if "gstin" in json.loads(c["request"])] == []
 
 
 def test_a_stored_call_is_reused_not_fetched_again(db, monkeypatch):
@@ -652,3 +654,282 @@ def test_c7_fetched_text_is_data_and_needs_the_name_and_a_term(db):
 def test_c7_no_directors_is_a_gap(db):
     _, v = run_case(2)
     assert checks_of(v)["c7"] == ("pass", "people_not_given") and not SEARCHED
+
+
+# --- phase 3: templates and cards ---
+
+import re  # noqa: E402
+
+from cc.core import load_templates  # noqa: E402
+
+
+def used_rule_ids() -> set[str]:
+    ids = set()
+    for f in ("checks.py", "intake.py", "worker.py"):
+        ids |= set(re.findall(r'rule_id="(\w+)"', (ROOT / "cc" / f).read_text(encoding="utf-8")))
+        ids |= set(re.findall(r'cv\("(\w+)"', (ROOT / "cc" / f).read_text(encoding="utf-8")))
+    return ids | {"over_cost_cap", "over_time_limit"}
+
+
+@pytest.mark.phase3
+def test_every_rule_id_has_both_sentences():
+    rules = load_templates()["rules"]
+    for rid in used_rule_ids():
+        assert rid in rules, f"templates.yaml has no entry for {rid}"
+        assert rules[rid].get("en") and rules[rid].get("hi"), rid
+
+
+@pytest.mark.phase3
+def test_templates_use_placeholders_only_and_hindi_is_flagged():
+    t = load_templates()
+    assert t["hindi_reviewed"] is False
+    for rid, entry in t["rules"].items():
+        for k, s in entry.items():
+            if isinstance(s, str):
+                assert not re.search(r"\{[^}]*[^\w}][^}]*\}", s), f"{rid}.{k}: placeholders only"
+
+
+@pytest.mark.phase3
+def test_cannot_verify_rules_have_contest_and_ask():
+    rules = load_templates()["rules"]
+    for rid in used_rule_ids() - {"formats_ok", "gst_active"}:
+        for k in ("contest_en", "contest_hi"):
+            assert rules[rid].get(k), f"{rid}.{k}"
+
+
+@pytest.mark.phase3
+@pytest.mark.parametrize("n, verdict", [(4, "Reject"), (8, "Cannot verify")])
+def test_vendor_cards_in_both_languages(db, monkeypatch, n, verdict):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    _, v = run_case(n)
+    assert v["verdict"] == verdict
+    for lang in ("en", "hi"):
+        vc = v["card"]["vendor"][lang]
+        assert vc["verdict"] == verdict and vc["reasons"]
+        assert all(r["text"] and r["contest"] and "—" not in r["text"] for r in vc["reasons"])
+    if n == 4:
+        r = v["card"]["vendor"]["en"]["reasons"][0]
+        assert "2019-12-03" in r["text"] and r["sources"][0]["source"] == "fixture_gstin" and r["sources"][0]["retrieved_at"]
+        assert "REG-22" in r["contest"]
+    assert v["card"]["vendor"]["hi"]["reviewed"] is False
+
+
+@pytest.mark.phase3
+def test_no_drafted_ask_unless_cannot_verify():
+    gap = {"internal": False, "ask_en": "we will retry", "ask_hi": "हम दोबारा कोशिश करेंगे"}
+    assert output.follow_ups({"verdict": "Reject", "gaps": [gap]}, "en") == []
+    assert output.follow_ups({"verdict": "Cannot verify", "gaps": [gap]}, "en") == ["we will retry"]
+
+
+@pytest.mark.phase3
+def test_refer_renders_with_source(db, monkeypatch):
+    monkeypatch.setitem(sources.GST_FIXTURES, "27AAACR2504F1ZU",
+                        {**sources.GST_FIXTURES["27AAACR2504F1ZU"], "gst_in_status": "Provisional"})
+    _, v = run_case(2)
+    reason = next(r for r in v["output"]["reasons"] if r["rule_id"] == "gst_status_other")
+    assert "Provisional" in reason["text_en"] and "Provisional" in reason["text_hi"] and reason["facts"]
+    assert v["card"]["approver"]["bank"]["note"] == "Account holder not verified"
+
+
+# --- phase 4-B: cost, limits, redecide ---
+
+@pytest.mark.phase4b
+def test_job_cost_is_the_sum_of_its_calls(db, monkeypatch):
+    monkeypatch.setitem(sources.PRICE_KEYS, "fixture", "cashfree_gstin")  # give the fixture a price
+    monkeypatch.setitem(sources.PARSE_PROVIDERS, "haiku",
+                        lambda **_: ({"text": json.dumps({"name": "Ashirwad Roadways", "gstin": "23AKHPK8O71C1ZE"})},
+                                     {"tokens_in": 1_000_000, "tokens_out": 100_000}))
+    for n in (2, 8):
+        job_id, v = run_case(n)
+        calls = store.job_calls(job_id)
+        assert v["output"]["cost_inr"] == round(sum(c["cost_inr"] * (1 + c["repeats"]) for c in calls), 2)
+        assert v["card"]["approver"]["cost_inr"] == v["output"]["cost_inr"] > 0
+    p = load_rules()["prices_inr"]
+    haiku = next(c for c in store.job_calls(job_id) if c["provider"] == "haiku")
+    assert (haiku["tokens_in"], haiku["tokens_out"]) == (1_000_000, 100_000)
+    assert haiku["cost_inr"] == pytest.approx(p["haiku_in_per_mtok"] + p["haiku_out_per_mtok"] / 10)
+
+
+@pytest.mark.phase4b
+def test_cost_cap_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
+    rules = load_rules()
+    rules["limits"]["cost_cap_inr"] = 0.5
+    monkeypatch.setattr(sources, "load_rules", lambda: rules)
+    monkeypatch.setitem(sources.PRICE_KEYS, "fixture", "cashfree_gstin")  # ₹1 > ₹0.5 cap
+    job_id, v = run_case(2)
+    c2 = next(c for c in v["checks"] if c["check"] == "c2")
+    assert (c2["result"], c2["rule_id"]) == ("cannot_verify", "over_cost_cap")
+    assert v["verdict"] == "Cannot verify" and store.job_calls(job_id) == []
+
+
+@pytest.mark.phase4b
+def test_time_limit_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
+    rules = load_rules()
+    rules["limits"]["time_limit_s"] = -1
+    monkeypatch.setattr(sources, "load_rules", lambda: rules)
+    _, v = run_case(2)
+    c2 = next(c for c in v["checks"] if c["check"] == "c2")
+    assert c2["rule_id"] == "over_time_limit"
+
+
+@pytest.mark.phase4b
+def test_redecide_uses_stored_evidence_only_and_voids_on_hash_change(db, monkeypatch):
+    job_id, v = run_case(4)
+    h = current_hash(job_id)
+    store.approve(job_id, h, "a")
+    monkeypatch.setitem(sources.GST_PROVIDERS, "fixture", lambda **_: pytest.fail("fetched again"))
+    worker.redecide(job_id)  # same rules: same hash, approval kept
+    assert [a["void"] for a in store.approvals(job_id)] == [0]
+    assert len(store.verdicts(job_id)) == 2
+    monkeypatch.setattr(worker, "rules_hash", lambda: "edited-rules")
+    out = worker.redecide(job_id)
+    assert out["approval_hash"] != h
+    assert [a["void"] for a in store.approvals(job_id)] == [1]
+    hist = store.verdicts(job_id)
+    assert len(hist) == 3 and hist[-1]["rules_hash"] == "edited-rules" and hist[-1]["verdict"] == "Reject"
+
+
+@pytest.mark.phase4b
+def test_reapproving_a_voided_hash_makes_it_live_again(db, monkeypatch):
+    job_id, _ = run_case(4)
+    h = current_hash(job_id)
+    store.approve(job_id, h, "a")
+    store.void_approvals_except(job_id, "rules-b-hash")  # redecide under rules B
+    store.approve(job_id, h, "b")  # back on rules A, approved again
+    rows = store.approvals(job_id)
+    assert [(r["void"], r["approved_by"]) for r in rows] == [(0, "b")]
+
+
+@pytest.mark.phase4b
+def test_redecide_never_fetches(db, monkeypatch):
+    job_id, _ = run_case(2)
+    with store.tx() as c:  # pretend the stored GST call is gone; redecide must not refetch it
+        c.execute("DELETE FROM calls")
+    worker.redecide(job_id)
+    assert sources.OFFLINE.get() is False and store.job_calls(job_id) == []
+
+
+# --- phase 4-B: cost units, limits on stored calls, offline reset, API ---
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from cc import app as app_module  # noqa: E402
+
+
+@pytest.mark.phase4b
+def test_cost_units():
+    prices = {"cashfree_gstin": 1.0, "crustdata_credit": 0.5, "haiku_in_per_mtok": 8.5, "haiku_out_per_mtok": 42.5}
+    assert sources._cost("cashfree", {}, prices) == 1.0
+    assert sources._cost("fixture", {}, prices) == 0.0
+    assert sources._cost("crustdata", {"credits": 4}, prices) == 2.0
+    assert sources._cost("haiku", {"tokens_in": 2000, "tokens_out": 400}, prices) == pytest.approx(0.034)
+
+
+@pytest.mark.phase4b
+def test_credits_meta_through_call_is_costed(db, monkeypatch):
+    rules = load_rules()
+    rules["prices_inr"]["crustdata_credit"] = 0.25
+    monkeypatch.setattr(sources, "load_rules", lambda: rules)
+    store.submit("j1", "t", {})
+    row, resp = sources.call("j1", ["crustdata"], {"q": "x"}, {"crustdata": lambda q: ({"hits": [q]}, {"credits": 8})})
+    assert resp == {"hits": ["x"]} and row["cost_inr"] == 2.0 and row["status"] == "done"
+
+
+@pytest.mark.phase4b
+def test_limit_is_not_applied_to_a_stored_response(db, monkeypatch):
+    run_case(2)  # GST response now stored
+    rules = load_rules()
+    rules["limits"]["cost_cap_inr"] = 0
+    monkeypatch.setattr(sources, "load_rules", lambda: rules)
+    monkeypatch.setitem(sources.PRICE_KEYS, "fixture", "cashfree_gstin")
+    job_id = worker.submit({**load_case(2)["request"], "client_id": "other-client"})
+    worker.run_job(job_id)
+    c2 = next(c for c in store.latest_verdict(job_id)["checks"] if c["check"] == "c2")
+    assert c2["result"] == "pass", "a resumed or repeated job is never blocked on a call already paid for"
+
+
+@pytest.mark.phase4b
+def test_offline_is_reset_when_redecide_fails(db, monkeypatch):
+    job_id, _ = run_case(4)
+    monkeypatch.setitem(worker.STEP_FNS, "checks", lambda *_: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        worker.redecide(job_id)
+    assert sources.OFFLINE.get() is False
+    assert store.job(job_id)["status"] == "awaiting_approval", "a failed redecide hands the job back"
+
+
+@pytest.mark.phase4b
+def test_offline_holds_only_in_its_own_context():
+    import threading
+    token = sources.OFFLINE.set(True)
+    try:
+        seen = []
+        t = threading.Thread(target=lambda: seen.append(sources.OFFLINE.get()))
+        t.start()
+        t.join()
+    finally:
+        sources.OFFLINE.reset(token)
+    assert seen == [False], "another request's thread is not offline"
+
+
+@pytest.mark.phase4b
+def test_redecide_in_progress_refuses_a_second_redecide_and_an_edit(db):
+    client = TestClient(app_module.app)
+    job_id, _ = run_case(4)
+    assert store.claim_redecide(job_id) and store.job(job_id)["status"] == "redeciding"
+    assert worker.redecide(job_id) is None, "a second redecide does not run"
+    assert store.next_job() is None, "the worker never picks up a job being redecided"
+    req = json.loads(store.job(job_id)["request"])
+    assert store.edit(job_id, req) is False and len(store.done_steps(job_id)) == len(worker.STEPS)
+    assert client.post(f"/jobs/{job_id}/edit", json={"field": "ifsc", "value": "SBIN0030010"}).status_code == 409
+    store.release_redecide(job_id)
+    assert worker.redecide(job_id)["verdict"] == "Reject"
+    assert store.job(job_id)["status"] == "awaiting_approval"
+
+
+@pytest.mark.phase4b
+def test_redecide_endpoint_and_history(db):
+    client = TestClient(app_module.app)  # no context manager: the lifespan (worker subprocess) is not started
+    job_id = worker.submit(load_case(4)["request"])
+    assert client.post(f"/jobs/{job_id}/redecide").status_code == 409, "queued jobs cannot be redecided"
+    worker.run_job(job_id)
+    r = client.post(f"/jobs/{job_id}/redecide")
+    assert r.status_code == 200 and r.json()["verdict"] == "Reject"
+    j = client.get(f"/jobs/{job_id}").json()
+    assert [h["verdict"] for h in j["history"]] == ["Reject", "Reject"]
+    assert j["verdict"]["card"]["approver"]["cost_inr"] == j["cost_inr"]
+    assert client.post("/jobs/nope/redecide").status_code == 404
+
+
+@pytest.mark.phase4b
+def test_offline_call_uses_stored_responses_only(db, monkeypatch):
+    store.submit("j1", "t", {})
+    fetched = []
+    fns = {"p": lambda q: fetched.append(q) or {"ok": q}}
+    sources.call("j1", ["p"], {"q": "stored"}, fns)
+    token = sources.OFFLINE.set(True)
+    try:
+        assert sources.call("j1", ["p"], {"q": "stored"}, fns)[1] == {"ok": "stored"}
+        with pytest.raises(sources.SourceUnavailable):
+            sources.call("j1", ["p"], {"q": "new"}, fns)
+    finally:
+        sources.OFFLINE.reset(token)
+    assert fetched == ["stored"], "offline mode never goes out"
+
+
+@pytest.mark.phase4b
+def test_redecide_blocks_a_check_that_tries_to_fetch(db, monkeypatch):
+    """Phase 2/4-A checks may call sources (e.g. Crustdata inside c3); redecide must still make no outside call."""
+    job_id, _ = run_case(4)
+    fetched = []
+    real_checks = worker.STEP_FNS["checks"]
+
+    def checks_that_fetch(job, done):
+        try:
+            sources.call(job["job_id"], ["p"], {"q": "new"}, {"p": lambda q: fetched.append(q) or {}})
+        except sources.SourceUnavailable:
+            pass
+        return real_checks(job, done)
+    monkeypatch.setitem(worker.STEP_FNS, "checks", checks_that_fetch)
+    worker.redecide(job_id)
+    assert fetched == []

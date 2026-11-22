@@ -27,16 +27,16 @@
 
 ## B: cost, limits, redecide
 
-- [ ] Cost per call in `calls`:
+- [x] Cost per call in `calls`:
   - Crustdata credits × `prices_inr.crustdata_credit`.
   - The GST per-call price.
   - Haiku input and output tokens × the prices in `rules.yaml`.
 
   The job total is the sum over that job's calls. It's shown on the approver card and in the output's `cost_inr`.
-- [ ] Limits in `cc/worker.py`:
+- [x] Limits (checked in `sources.call()` before each paid call):
   - Before each paid call, if the job's spend plus the call's price would pass `cost_cap_inr`, the remaining checks get Cannot verify: over cost cap.
   - Past `time_limit_s`, the remaining checks get Cannot verify: over time limit.
-- [ ] `redecide(job_id)` in `cc/worker.py`, plus `POST /jobs/{id}/redecide`. It reruns checks and decide from stored evidence with the current `rules.yaml`, makes no outside calls, adds a new `verdicts` row and voids the approval if the hash changed. The page shows the old and new verdicts side by side.
+- [x] `redecide(job_id)` in `cc/worker.py`, plus `POST /jobs/{id}/redecide`. It reruns checks and decide from stored evidence with the current `rules.yaml`, makes no outside calls, adds a new `verdicts` row and voids the approval if the hash changed. The page shows the old and new verdicts side by side.
 - [ ] Rehearse each live fix once and time it:
 
   | Likely request | Where | Then |
@@ -45,6 +45,61 @@
   | Lower the cost cap | `rules.yaml` | rerun; checks over the cap show Cannot verify |
   | New rule: GST registered under 6 months gives Refer | `rules.yaml`, plus one sentence in each language in `templates.yaml` | redecide |
   | Raise the namesake threshold from 2 anchors to 3 | `rules.yaml` | redecide |
+
+## B: design decisions (as built)
+
+### Contracts A needs for c5–c7
+
+1. **Provider return value.** A function passed to `sources.call()` returns either `resp` or `(resp, meta)`:
+   - `{"credits": n}` for Crustdata. Wrap the existing `(json, credits)` as `(json, {"credits": credits})`.
+   - `{"tokens_in": i, "tokens_out": o}` for Haiku.
+   - nothing, for fixed-price providers (they're priced through `sources.PRICE_KEYS` and `prices_inr`).
+2. **Limits.** `call()` raises `sources.OverLimit(rule_id)`, a subclass of `SourceUnavailable`, before a call would pass a limit.
+   - Catch it before `SourceUnavailable` and put `limit_rule` in the step output. `step_gather` does `{"skipped": …, "limit_rule": "over_cost_cap"}`.
+   - Checks use `gather.get("limit_rule", …)` as their `rule_id`. `checks.c2` already does.
+3. **Templates.** Every new `rule_id` needs `en`, `hi`, `contest_en` and `contest_hi` in `templates.yaml`, plus `ask_*` if it can be Cannot verify. Otherwise `test_every_rule_id_has_both_sentences` fails.
+
+### Cost
+
+- `sources._cost(provider, meta, prices)` works out rupees per call: credits × `crustdata_credit`, or tokens × `haiku_in_per_mtok` / `haiku_out_per_mtok` ÷ 1e6, or the fixed price.
+- `store.call_finished` now also writes `tokens_in` and `tokens_out`.
+- The job total is unchanged from phase 1: `sum(cost_inr × (1 + repeats))` over `store.job_calls(job_id)`. It's the same figure in `output.cost_inr`, on the approver card and in `GET /jobs/{id}`.
+
+### Limits
+
+- They're checked in `sources.call()`, not the worker, because that's the one place every paid call passes. The check runs only when no stored response exists, so a resumed job never trips a limit on a call it already paid for.
+- `sources.limit_hit()`:
+  - elapsed time since `jobs.started_at` over `time_limit_s` gives `over_time_limit`;
+  - spend so far plus the provider's fixed price over `cost_cap_inr` gives `over_cost_cap`.
+  - Variable-price providers (Crustdata, Haiku) have no price until the response arrives, so for them only spend so far counts.
+- The old `worker._over_limits()` stub is removed.
+- Card wording for both limits is in `templates.yaml` (`over_cost_cap`, `over_time_limit`).
+
+### Redecide
+
+- `worker.redecide(job_id)` reruns only `checks`, `decide` and `output`, from the stored step outputs and evidence, with the current `rules.yaml` and `templates.yaml`.
+  - Intake, formats, resolve and gather are not rerun. Changing the input is what Edit is for.
+- `sources.OFFLINE = True` for the duration, so `call()` returns stored responses only and otherwise raises `SourceUnavailable`. It's reset in `finally`.
+- Each redecide adds a `verdicts` row; the history is `store.verdicts(job_id)`.
+- Approvals are voided only when the new approval hash differs (`store.void_approvals_except`). Unchanged rules give the same hash, and the approval stands.
+- `POST /jobs/{id}/redecide` runs in the app process, because it makes no outside calls and finishes in milliseconds. It returns 409 unless the job is `awaiting_approval`, so it never races the worker.
+- **Page:** a Redecide button, plus a "previous vs now" panel showing the last two verdicts with their rules hash and reasons.
+- **Known limit:** `elapsed_s` in a redecided output counts from the job's original start.
+
+### Tests added (`test_decide.py`)
+
+Run only B's half with `uv run pytest -m phase4b -v` (12 tests, tagged `@pytest.mark.phase4b`). Beyond the list below, the tests also cover:
+
+- `_cost` units, and the credits meta passed through `call()`;
+- a limit never blocks a response that's already stored;
+- `OFFLINE` returns stored responses only, and is reset even when redecide fails;
+- a check that tries to fetch during redecide is blocked;
+- `POST /jobs/{id}/redecide` returns 409 while queued, 200 after, and 404 for an unknown job, with the history in `GET /jobs/{id}`.
+
+- cost equals the sum of the calls, with a priced fixture and a stubbed Haiku token count (₹ checked against `rules.yaml`);
+- `cost_cap_inr: 0.5` gives c2 `over_cost_cap` with no call made;
+- `time_limit_s: -1` gives `over_time_limit`;
+- redecide fetches nothing (the provider is patched to fail and the calls table is emptied), keeps the approval when the hash is unchanged, and voids it after a rules change.
 
 ## Edge cases closed
 
@@ -67,10 +122,10 @@
 ## Done when
 
 - [ ] Case 9: the common-name director's namesake raises no flag and nothing about them is stored.
-- [ ] The rupee total on the approver card equals the sum of the job's `calls` rows.
-- [ ] Lowering `cost_cap_inr` turns the remaining checks into Cannot verify: over cost cap.
+- [x] The rupee total on the approver card equals the sum of the job's `calls` rows.
+- [x] Lowering `cost_cap_inr` turns the remaining checks into Cannot verify: over cost cap.
 - [ ] Each live fix above works in under 5 minutes.
-- [ ] `scripts/eval.py` shows no wrong verdict, and `scripts/kill_test.py` still passes.
+- [ ] `scripts/eval.py` shows no wrong verdict, and `scripts/kill_test.py` still passes. (B's half passed on 22 November 2026: 0 wrong, 20/20. Rerun after 4-A.)
 
 ## A wrap-up (phase 4A)
 
