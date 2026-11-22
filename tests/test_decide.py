@@ -318,6 +318,13 @@ def test_vendor_cards_in_both_languages(db, monkeypatch, n, verdict):
 
 
 @pytest.mark.phase3
+def test_no_drafted_ask_unless_cannot_verify():
+    gap = {"internal": False, "ask_en": "we will retry", "ask_hi": "हम दोबारा कोशिश करेंगे"}
+    assert output.follow_ups({"verdict": "Reject", "gaps": [gap]}, "en") == []
+    assert output.follow_ups({"verdict": "Cannot verify", "gaps": [gap]}, "en") == ["we will retry"]
+
+
+@pytest.mark.phase3
 def test_refer_renders_with_source(db, monkeypatch):
     monkeypatch.setitem(sources.GST_FIXTURES, "27AAACR2504F1ZU",
                         {**sources.GST_FIXTURES["27AAACR2504F1ZU"], "gst_in_status": "Provisional"})
@@ -401,9 +408,8 @@ def test_redecide_never_fetches(db, monkeypatch):
     job_id, _ = run_case(2)
     with store.tx() as c:  # pretend the stored GST call is gone; redecide must not refetch it
         c.execute("DELETE FROM calls")
-    monkeypatch.setattr(sources, "OFFLINE", False)
     worker.redecide(job_id)
-    assert sources.OFFLINE is False and store.job_calls(job_id) == []
+    assert sources.OFFLINE.get() is False and store.job_calls(job_id) == []
 
 
 # --- phase 4-B: cost units, limits on stored calls, offline reset, API ---
@@ -451,7 +457,37 @@ def test_offline_is_reset_when_redecide_fails(db, monkeypatch):
     monkeypatch.setitem(worker.STEP_FNS, "checks", lambda *_: 1 / 0)
     with pytest.raises(ZeroDivisionError):
         worker.redecide(job_id)
-    assert sources.OFFLINE is False
+    assert sources.OFFLINE.get() is False
+    assert store.job(job_id)["status"] == "awaiting_approval", "a failed redecide hands the job back"
+
+
+@pytest.mark.phase4b
+def test_offline_holds_only_in_its_own_context():
+    import threading
+    token = sources.OFFLINE.set(True)
+    try:
+        seen = []
+        t = threading.Thread(target=lambda: seen.append(sources.OFFLINE.get()))
+        t.start()
+        t.join()
+    finally:
+        sources.OFFLINE.reset(token)
+    assert seen == [False], "another request's thread is not offline"
+
+
+@pytest.mark.phase4b
+def test_redecide_in_progress_refuses_a_second_redecide_and_an_edit(db):
+    client = TestClient(app_module.app)
+    job_id, _ = run_case(4)
+    assert store.claim_redecide(job_id) and store.job(job_id)["status"] == "redeciding"
+    assert worker.redecide(job_id) is None, "a second redecide does not run"
+    assert store.next_job() is None, "the worker never picks up a job being redecided"
+    req = json.loads(store.job(job_id)["request"])
+    assert store.edit(job_id, req) is False and len(store.done_steps(job_id)) == len(worker.STEPS)
+    assert client.post(f"/jobs/{job_id}/edit", json={"field": "ifsc", "value": "SBIN0030010"}).status_code == 409
+    store.release_redecide(job_id)
+    assert worker.redecide(job_id)["verdict"] == "Reject"
+    assert store.job(job_id)["status"] == "awaiting_approval"
 
 
 @pytest.mark.phase4b
@@ -474,10 +510,13 @@ def test_offline_call_uses_stored_responses_only(db, monkeypatch):
     fetched = []
     fns = {"p": lambda q: fetched.append(q) or {"ok": q}}
     sources.call("j1", ["p"], {"q": "stored"}, fns)
-    monkeypatch.setattr(sources, "OFFLINE", True)
-    assert sources.call("j1", ["p"], {"q": "stored"}, fns)[1] == {"ok": "stored"}
-    with pytest.raises(sources.SourceUnavailable):
-        sources.call("j1", ["p"], {"q": "new"}, fns)
+    token = sources.OFFLINE.set(True)
+    try:
+        assert sources.call("j1", ["p"], {"q": "stored"}, fns)[1] == {"ok": "stored"}
+        with pytest.raises(sources.SourceUnavailable):
+            sources.call("j1", ["p"], {"q": "new"}, fns)
+    finally:
+        sources.OFFLINE.reset(token)
     assert fetched == ["stored"], "offline mode never goes out"
 
 

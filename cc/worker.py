@@ -135,20 +135,27 @@ def run_job(job_id: str) -> None:
 REDECIDE_STEPS = ["checks", "decide", "output"]
 
 
-def redecide(job_id: str) -> dict:
+def redecide(job_id: str) -> dict | None:
     """Rerun checks, decide and output from stored evidence with the current rules.yaml and templates.yaml.
-    No outside calls (sources.OFFLINE). Adds a verdicts row; voids approvals made under a different hash."""
+    No outside calls (sources.OFFLINE). Adds a verdicts row; voids approvals made under a different hash.
+    Returns None if the job is not awaiting approval (still running, edited, or another redecide is on).
+    The output step hands the job back to awaiting_approval; a failure before it hands it back unchanged."""
+    if not store.claim_redecide(job_id):
+        return None
     job = store.job(job_id)
     done = store.done_steps(job_id)
-    sources.OFFLINE = True
+    token = sources.OFFLINE.set(True)
     try:
         for name in REDECIDE_STEPS:
             started = time.time()
             out, extra = STEP_FNS[name](job, done)
             store.finish_step(job_id, name, out, started, extra)
             done[name] = out
+    except BaseException:
+        store.release_redecide(job_id)
+        raise
     finally:
-        sources.OFFLINE = False
+        sources.OFFLINE.reset(token)
     v, job = store.latest_verdict(job_id), store.job(job_id)
     new_hash = output.approval_hash(v["verdict"], [e["evidence_id"] for e in store.evidence(job_id)],
                                     job["bank_hash"], v["rules_hash"])

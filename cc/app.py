@@ -136,7 +136,8 @@ def edit(job_id: str, body: Edit):
         clean = scrub_request(Request(**req).model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(422, str(e))
-    store.edit(job_id, clean)
+    if not store.edit(job_id, clean):
+        raise HTTPException(409, "a redecide is running; edit again in a moment")
     return {"job_id": job_id}
 
 
@@ -146,7 +147,10 @@ def redecide_job(job_id: str):
     job = _job_or_404(job_id)
     if job["status"] != "awaiting_approval":
         raise HTTPException(409, f"job is {job['status']}; redecide after it finishes")
-    return redecide(job_id)
+    out = redecide(job_id)
+    if out is None:
+        raise HTTPException(409, "job changed or a redecide is already running; try again")
+    return out
 
 
 @app.get("/worker")

@@ -3,6 +3,7 @@ parse providers, the vendor-master reader, and the phase-0 Haiku/GST probes. IFS
 arrive in phases 2 and 4.
 Probe: `uv run python -m cc.sources` writes logs/probe_haiku.json and logs/probe_gst_live.json.
 """
+import contextvars
 import copy
 import csv
 import hashlib
@@ -161,8 +162,9 @@ class OverLimit(SourceUnavailable):
         self.rule_id = rule_id
 
 
-# Set by worker.redecide(): only stored responses may be used, nothing is fetched.
-OFFLINE = False
+# Set by worker.redecide(): only stored responses may be used, nothing is fetched. A ContextVar, so it holds
+# only for that redecide; overlapping requests on other threads are unaffected.
+OFFLINE: contextvars.ContextVar[bool] = contextvars.ContextVar("offline", default=False)
 
 
 def _cost(provider: str, meta: dict, prices: dict) -> float:
@@ -210,7 +212,7 @@ def call(job_id: str, providers: list[str], request: dict, fns: dict) -> tuple[d
         row = store.call_row(call_key(p, request))
         if row and row["status"] == "done":
             return row, json.loads(row["response"])
-    if OFFLINE:
+    if OFFLINE.get():
         raise SourceUnavailable([])
     rules = load_rules()
     tried = []

@@ -31,7 +31,7 @@ def _sentence(templates: dict, rule_id: str, key: str, values: dict) -> str | No
 
 def _texts(templates: dict, rule_id: str, values: dict) -> dict:
     texts = {f"{k}_{lang}": _sentence(templates, rule_id, f"{k}_{lang}" if k != "text" else lang, values)
-             for k in ("text", "contest", "ask") for lang in ("en", "hi")}
+             for k in ("text", "contest", "ask", "missing") for lang in ("en", "hi")}
     return {**texts, "internal": bool(templates["rules"].get(rule_id, {}).get("internal"))}
 
 
@@ -67,7 +67,7 @@ def vendor_card(out: dict, lang: str) -> dict:
     reasons = [{"text": r[f"text_{lang}"], "contest": r[f"contest_{lang}"],
                 "sources": [{"source": f["source"], "retrieved_at": f["retrieved_at"]} for f in r["facts"]]}
                for r in out["reasons"] if not r["internal"]]
-    missing = ([g["missing"] for g in out["gaps"] if not g["internal"] and g["missing"]]
+    missing = ([g[f"missing_{lang}"] for g in out["gaps"] if not g["internal"] and g[f"missing_{lang}"]]
                if out["verdict"] == "Cannot verify" else [])
     return {"verdict": out["verdict"], "reasons": reasons, "missing": missing,
             "reviewed": lang == "en" or out["hindi_reviewed"]}
@@ -75,6 +75,8 @@ def vendor_card(out: dict, lang: str) -> dict:
 
 def follow_ups(out: dict, lang: str) -> list[str]:
     """One drafted ask per Cannot verify item. Shown with a copy button; never sent."""
+    if out["verdict"] != "Cannot verify":
+        return []
     asks = []
     for g in out["gaps"]:
         a = None if g["internal"] else g.get(f"ask_{lang}")
@@ -85,13 +87,14 @@ def follow_ups(out: dict, lang: str) -> list[str]:
 
 def approver_card(out: dict, record: dict, checks: list[dict]) -> dict:
     v, b = record["vendor"], record["bank"]
+    note = _sentence(load_templates(), "bank_holder_not_checked", "en", {})
     return {
         "verdict": out["verdict"],
         "carrier": v.get("name_as_written"),
         "gstin": v.get("gstin"),
         "pan_holder_type": v.get("pan_holder_type"),
         "bank": {"ifsc": b.get("ifsc"), "account_last4": b.get("account_last4"), "holder_checked": False,
-                 "note": "Account holder not verified"},
+                 "note": note},
         "checks": [{"check": c["check"], "result": c["result"], "rule_id": c["rule_id"]} for c in checks],
         "reasons": out["reasons"],
         "gaps": out["gaps"],

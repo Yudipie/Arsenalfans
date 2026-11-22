@@ -132,14 +132,30 @@ def finish_step(job_id: str, name: str, output: dict, started_at: float, extra=N
                   (job_id, name, "done", json.dumps(output, default=str), started_at, time.time()))
 
 
-def edit(job_id: str, request: dict) -> None:
-    """New details: drop the steps and evidence, void approvals, queue again. Stored calls stay and are reused."""
+def edit(job_id: str, request: dict) -> bool:
+    """New details: drop the steps and evidence, void approvals, queue again. Stored calls stay and are reused.
+    Refused (False) while a redecide is writing the job's steps."""
     with tx() as c:
-        c.execute("UPDATE jobs SET request=?, status='queued', current_step=NULL, finished_at=NULL WHERE job_id=?",
-                  (json.dumps(request), job_id))
+        if c.execute("UPDATE jobs SET request=?, status='queued', current_step=NULL, finished_at=NULL "
+                     "WHERE job_id=? AND status<>'redeciding'", (json.dumps(request), job_id)).rowcount == 0:
+            return False
         c.execute("DELETE FROM steps WHERE job_id=?", (job_id,))
         c.execute("DELETE FROM evidence WHERE job_id=?", (job_id,))
         c.execute("UPDATE approvals SET void=1 WHERE job_id=?", (job_id,))
+    return True
+
+
+def claim_redecide(job_id: str) -> bool:
+    """Only a finished job is redecided, by one request at a time. The worker never picks up a 'redeciding'
+    job and an edit is refused until it is handed back."""
+    with tx() as c:
+        return c.execute("UPDATE jobs SET status='redeciding' WHERE job_id=? AND status='awaiting_approval'",
+                         (job_id,)).rowcount == 1
+
+
+def release_redecide(job_id: str) -> None:
+    with tx() as c:
+        c.execute("UPDATE jobs SET status='awaiting_approval' WHERE job_id=? AND status='redeciding'", (job_id,))
 
 
 # --- calls ---

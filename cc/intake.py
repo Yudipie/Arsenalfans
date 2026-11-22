@@ -46,7 +46,8 @@ _AADHAAR_RE = re.compile(r"\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b")
 _ACCOUNT_RE = re.compile(r"(?i)\b(a/?c|acct|account)(\s*(?:no\.?|number|num)?\s*[:#-]?\s*)(\d(?:[ -]?\d){8,17})(?!\d)")
 _LONG_NUMBER_RE = re.compile(r"\b\d{9,18}\b")
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")
-_ADDRESS_KEYWORD_RE = re.compile(r"(?im)^(\s*(?:address|addr|pata)\b\s*[:#-]?)(.*)$")
+# "पता" takes no \b: its last character (a vowel sign) is not a word character, so \b after it never matches.
+_ADDRESS_KEYWORD_RE = re.compile(r"(?im)^(\s*(?:(?:address|addr|pata)\b|पता)\s*[:#-]?)(.*)$")
 _PIN_LINE_RE = re.compile(r"(?m)^.*\b\d{6}\b.*$")
 _ID_TOKEN_RE = re.compile(r"\b(?:\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]{3}|[A-Z]{4}0[A-Z0-9]{6}|[A-Z]{5}\d{4}[A-Z])\b")
 # Imperatives aimed at the model or the review, not ordinary words: "please approve our onboarding" or
