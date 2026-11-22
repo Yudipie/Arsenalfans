@@ -370,8 +370,13 @@ def text_request(text, **fields):
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
+    from cc import crustdata
     monkeypatch.setenv("CC_DB", str(tmp_path / "t.sqlite"))
     monkeypatch.setenv("MOCK", "1")
+    # a name-only request goes to discovery; Crustdata answers empty so no test call goes live
+    monkeypatch.setitem(crustdata.PROVIDERS, "crustdata_identify", lambda names: {"body": [{"matches": []}], "credits": 1})
+    monkeypatch.setitem(crustdata.PROVIDERS, "crustdata_web_search", lambda **_: {"body": {"results": []}, "credits": 1})
+    monkeypatch.setitem(crustdata.PROVIDERS, "crustdata_web_fetch", lambda urls: {"body": [], "credits": 1})
     store.init()
 
 
@@ -440,7 +445,8 @@ def test_english_text_keeps_default_language_and_haiku_answer_skips_fixture(fres
     stub_parse(monkeypatch, {"name": "Rajesh Roadlines Pvt Ltd", "language": "en"})
     job_id, _ = run(text_request("Hello, this is Rajesh Roadlines Pvt Ltd."))
     assert json.loads(store.job(job_id)["record"])["language"] == "en"
-    assert [c["provider"] for c in store.job_calls(job_id)] == ["haiku"]
+    # only the parse calls: discovery (phase 2) adds Crustdata calls for a name-only request
+    assert [c["provider"] for c in store.job_calls(job_id) if c["provider"] in sources.PARSE_PROVIDERS] == ["haiku"]
 
 
 @pytest.mark.phase3
@@ -458,7 +464,7 @@ def test_vendor_card_hides_internal_gaps_approver_card_shows_them(case8):
     card = store.latest_verdict(job_id)["card"]
     vendor_text = json.dumps(card["vendor"], ensure_ascii=False)
     assert "not built" not in vendor_text and "c1 did not pass" not in vendor_text
-    assert any(g["rule_id"] == "not_built" for g in card["approver"]["gaps"])
+    assert any(g["rule_id"] == "not_checked" and g["internal"] for g in card["approver"]["gaps"])
     assert card["vendor"]["en"]["reviewed"] is True and card["vendor"]["hi"]["reviewed"] is False
     assert card["vendor"]["en"]["missing"] == ["a valid GSTIN (23AKHPK8O71C1ZE does not pass the format check)"]
     assert card["vendor"]["hi"]["missing"] == ["सही GSTIN (23AKHPK8O71C1ZE फ़ॉर्मेट जाँच में सही नहीं निकला)"]

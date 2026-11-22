@@ -759,7 +759,10 @@ def test_cost_cap_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
     job_id, v = run_case(2)
     c2 = next(c for c in v["checks"] if c["check"] == "c2")
     assert (c2["result"], c2["rule_id"]) == ("cannot_verify", "over_cost_cap")
-    assert v["verdict"] == "Cannot verify" and store.job_calls(job_id) == []
+    assert v["verdict"] == "Cannot verify"
+    # the ₹1 GST call is never made; resolve's Crustdata calls are free (crustdata_credit is 0.0) so they may run
+    assert [c for c in store.job_calls(job_id) if "gstin" in json.loads(c["request"])] == []
+    assert v["output"]["cost_inr"] <= rules["limits"]["cost_cap_inr"]
 
 
 @pytest.mark.phase4b
