@@ -205,9 +205,12 @@ def latest_verdict(job_id: str) -> dict | None:
 
 
 def approve(job_id: str, approval_hash: str, approved_by: str) -> None:
-    """Approving twice under the same hash leaves one row."""
+    """Approving twice under the same hash leaves one row. A row voided by an earlier redecide is made live
+    again (rules A -> B -> A brings back hash A)."""
     with tx() as c:
-        c.execute("INSERT OR IGNORE INTO approvals (job_id, approval_hash, approved_by, approved_at) VALUES (?,?,?,?)",
+        c.execute("INSERT INTO approvals (job_id, approval_hash, approved_by, approved_at) VALUES (?,?,?,?) "
+                  "ON CONFLICT (job_id, approval_hash) DO UPDATE SET void=0, approved_by=excluded.approved_by, "
+                  "approved_at=excluded.approved_at WHERE void=1",
                   (job_id, approval_hash, approved_by, time.time()))
 
 

@@ -14,7 +14,7 @@
 - [x] `cc/intake.py`, the Haiku parse:
   - `claude-haiku-5-5`, no tools, structured output into the onboarding record. The output is checked against the pydantic model; on failure, retry once, then Cannot verify: could not parse.
   - The model fills `parse_notes` (doubts) and `missing` (required fields absent).
-  - Lines that look like instructions ("SYSTEM:", "approve", "ignore previous") are found by a code regex, not the model, and copied to `flagged_lines`. They change nothing.
+  - Lines that look like instructions ("SYSTEM:", "approve without review", "ignore previous instructions"; a plain "please approve" is not flagged) are found by a code regex, not the model, and copied to `flagged_lines`. They change nothing.
   - Language: Hindi or Hinglish input sets `language: hi`; otherwise `default_language` from `rules.yaml`.
 - [x] Required fields:
   - With no GSTIN and no name, the result is Cannot verify, with the field named and an ask drafted, and no paid call.
@@ -38,6 +38,8 @@
 - [x] Add rehearsal case 8 to `tests/cases/`.
 
 ## Tests
+
+Run only this phase with `uv run pytest -m phase3 -v` (21 tests, tagged `@pytest.mark.phase3`).
 
 - [x] `tests/test_intake.py`:
   - An Aadhaar in the input is absent from the SQLite file, `logs/` and the Haiku prompt (grep all three).

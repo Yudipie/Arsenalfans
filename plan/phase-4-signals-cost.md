@@ -88,6 +88,14 @@
 
 ### Tests added (`test_decide.py`)
 
+Run only B's half with `uv run pytest -m phase4b -v` (12 tests, tagged `@pytest.mark.phase4b`). Beyond the list below, the tests also cover:
+
+- `_cost` units, and the credits meta passed through `call()`;
+- a limit never blocks a response that's already stored;
+- `OFFLINE` returns stored responses only, and is reset even when redecide fails;
+- a check that tries to fetch during redecide is blocked;
+- `POST /jobs/{id}/redecide` returns 409 while queued, 200 after, and 404 for an unknown job, with the history in `GET /jobs/{id}`.
+
 - cost equals the sum of the calls, with a priced fixture and a stubbed Haiku token count (₹ checked against `rules.yaml`);
 - `cost_cap_inr: 0.5` gives c2 `over_cost_cap` with no call made;
 - `time_limit_s: -1` gives `over_time_limit`;

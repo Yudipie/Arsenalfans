@@ -16,3 +16,7 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "phase3: messy intake and the two cards (plan/phase-3-intake-cards.md)",
+    "phase4b: cost, limits and redecide (plan/phase-4-signals-cost.md, B)",
+]

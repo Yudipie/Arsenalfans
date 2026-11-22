@@ -43,12 +43,19 @@ def account_hash(account_number: str) -> str:
 
 _IFSC_RE = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$")
 _AADHAAR_RE = re.compile(r"\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b")
-_ACCOUNT_RE = re.compile(r"(?i)\b(a/?c|acct|account)(\s*(?:no\.?|number|num)?\s*[:#-]?\s*)(\d[\d\s-]{7,20}\d)")
+_ACCOUNT_RE = re.compile(r"(?i)\b(a/?c|acct|account)(\s*(?:no\.?|number|num)?\s*[:#-]?\s*)(\d(?:[ -]?\d){8,17})(?!\d)")
 _LONG_NUMBER_RE = re.compile(r"\b\d{9,18}\b")
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")
-_ADDRESS_LINE_RE = re.compile(r"(?im)^.*(?:\b\d{6}\b|^\s*(?:address|addr|pata)\b).*$")
-_INSTRUCTION_RE = re.compile(r"(?i)^\s*(system|assistant|user)\s*:|ignore (all |the )?previous|\bapprove\b|"
-                             r"\bdisregard\b|\boverride\b")
+_ADDRESS_KEYWORD_RE = re.compile(r"(?im)^(\s*(?:address|addr|pata)\b\s*[:#-]?)(.*)$")
+_PIN_LINE_RE = re.compile(r"(?m)^.*\b\d{6}\b.*$")
+_ID_TOKEN_RE = re.compile(r"\b(?:\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]{3}|[A-Z]{4}0[A-Z0-9]{6}|[A-Z]{5}\d{4}[A-Z])\b")
+# Imperatives aimed at the model or the review, not ordinary words: "please approve our onboarding" or
+# "ignore the earlier GSTIN" are honest request lines and must reach the parse.
+_INSTRUCTION_RE = re.compile(
+    r"(?i)^\s*(system|assistant|user)\s*:"
+    r"|\b(ignore|disregard|forget)\b.{0,30}\b(instructions?|rules?|prompt|checks?|review)\b"
+    r"|\bapprove\b.{0,40}\b(without|regardless|anyway|automatically|skip(ping)?)\b"
+    r"|\b(skip|bypass|override)\b.{0,30}\b(review|checks?|verification|rules?|instructions?|verdict)\b")
 
 # Verhoeff tables (Aadhaar's check digit).
 _V_D = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2, 3, 4, 0, 6, 7, 8, 9, 5], [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
@@ -86,7 +93,11 @@ def _last4(digits: str) -> str:
 
 
 def mask_text(text: str, fields: dict) -> str:
-    """Mask before anything is stored or shown to the model. Order matters: Aadhaar, then account, then the rest."""
+    """Mask before anything is stored or shown to the model. Order matters: account (it has a prefix), then
+    Aadhaar, then the rest. Address text is masked; GSTIN, IFSC and PAN tokens on that line are kept."""
+    def address(masked: str) -> str:
+        return " ".join(["[address]", *_ID_TOKEN_RE.findall(masked)])
+
     def aadhaar(m):
         return "[aadhaar removed]" if verhoeff_ok(m.group()) else f"[number ****{_last4(m.group())}]"
 
@@ -96,11 +107,12 @@ def mask_text(text: str, fields: dict) -> str:
             fields["account_hash"], fields["account_last4"] = account_hash(digits), digits[-4:]
         return f"{m.group(1)}{m.group(2)}[account ****{digits[-4:]}]"
 
-    text = _AADHAAR_RE.sub(aadhaar, text)
     text = _ACCOUNT_RE.sub(account, text)
+    text = _AADHAAR_RE.sub(aadhaar, text)
     text = _PHONE_RE.sub("[phone]", text)
     text = _LONG_NUMBER_RE.sub(lambda m: f"[number ****{m.group()[-4:]}]", text)
-    text = _ADDRESS_LINE_RE.sub("[address]", text)
+    text = _ADDRESS_KEYWORD_RE.sub(lambda m: f"{m.group(1)} {address(m.group(2))}", text)
+    text = _PIN_LINE_RE.sub(lambda m: address(m.group()), text)
     for d in fields.get("directors") or []:
         if d.get("name"):
             text = re.sub(re.escape(d["name"]), "[personal]", text, flags=re.I)
@@ -183,7 +195,9 @@ def check_formats(record: OnboardingRecord) -> tuple[CheckResult, list[str]]:
         return CheckResult(check="c1", result="cannot_verify", rule_id=rule_id, gap=gap), notes
 
     if record.parse_failed:
-        return cv("parse_failed", "could not read the pasted text")
+        if not g and not v.name_as_written:
+            return cv("parse_failed", "could not read the pasted text")
+        notes.append("could not read the pasted text; checked the form fields only")
     if not g and not v.name_as_written:
         return cv("name_and_gstin_missing", "carrier name or GSTIN")
     if not g:
