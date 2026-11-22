@@ -42,10 +42,11 @@ def account_hash(account_number: str) -> str:
 # --- phase 1: scrub at the door, request -> record, c1 formats ---
 
 _IFSC_RE = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$")
-_AADHAAR_RE = re.compile(r"\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b")
+# 4-4-4, optional space or hyphen; never part of a longer number (a spaced account number).
+_AADHAAR_RE = re.compile(r"(?<![+\d])(?<!\d[\s-])[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}(?![\s-]?\d)")
 _ACCOUNT_RE = re.compile(r"(?i)\b(a/?c|acct|account)(\s*(?:no\.?|number|num)?\s*[:#-]?\s*)(\d(?:[ -]?\d){8,17})(?!\d)")
-_LONG_NUMBER_RE = re.compile(r"\b\d{9,18}\b")
-_PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")
+_LONG_NUMBER_RE = re.compile(r"\b\d(?:[ -]?\d){8,17}\b")  # 9-18 digits, maybe grouped (a spaced account number)
+_PHONE_RE = re.compile(r"(?<![\d+])(?:\+?91[\s-]?|0)?\(?[6-9](?:\)?[\s-]?\d){9}(?!\d)")  # Indian mobile, any grouping
 # "पता" takes no \b: its last character (a vowel sign) is not a word character, so \b after it never matches.
 _ADDRESS_KEYWORD_RE = re.compile(r"(?im)^(\s*(?:(?:address|addr|pata)\b|पता)\s*[:#-]?)(.*)$")
 _PIN_LINE_RE = re.compile(r"(?m)^.*\b\d{6}\b.*$")
@@ -95,7 +96,8 @@ def _last4(digits: str) -> str:
 
 def mask_text(text: str, fields: dict) -> str:
     """Mask before anything is stored or shown to the model. Order matters: account (it has a prefix), then
-    Aadhaar, then the rest. Address text is masked; GSTIN, IFSC and PAN tokens on that line are kept."""
+    phone (so a +91/91-prefixed number is a phone, not an Aadhaar), then Aadhaar, then the rest.
+    Address text is masked; GSTIN, IFSC and PAN tokens on that line are kept."""
     def address(masked: str) -> str:
         return " ".join(["[address]", *_ID_TOKEN_RE.findall(masked)])
 
@@ -109,9 +111,9 @@ def mask_text(text: str, fields: dict) -> str:
         return f"{m.group(1)}{m.group(2)}[account ****{digits[-4:]}]"
 
     text = _ACCOUNT_RE.sub(account, text)
-    text = _AADHAAR_RE.sub(aadhaar, text)
     text = _PHONE_RE.sub("[phone]", text)
-    text = _LONG_NUMBER_RE.sub(lambda m: f"[number ****{m.group()[-4:]}]", text)
+    text = _AADHAAR_RE.sub(aadhaar, text)
+    text = _LONG_NUMBER_RE.sub(lambda m: f"[number ****{_last4(m.group())}]", text)
     text = _ADDRESS_KEYWORD_RE.sub(lambda m: f"{m.group(1)} {address(m.group(2))}", text)
     text = _PIN_LINE_RE.sub(lambda m: address(m.group()), text)
     for d in fields.get("directors") or []:

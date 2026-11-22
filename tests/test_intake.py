@@ -440,7 +440,7 @@ def test_english_text_keeps_default_language_and_haiku_answer_skips_fixture(fres
     stub_parse(monkeypatch, {"name": "Rajesh Roadlines Pvt Ltd", "language": "en"})
     job_id, _ = run(text_request("Hello, this is Rajesh Roadlines Pvt Ltd."))
     assert json.loads(store.job(job_id)["record"])["language"] == "en"
-    assert [c["provider"] for c in store.job_calls(job_id)] == ["haiku"]
+    assert [c["provider"] for c in store.job_calls(job_id) if "text" in json.loads(c["request"])] == ["haiku"]
 
 
 @pytest.mark.phase3
@@ -458,7 +458,7 @@ def test_vendor_card_hides_internal_gaps_approver_card_shows_them(case8):
     card = store.latest_verdict(job_id)["card"]
     vendor_text = json.dumps(card["vendor"], ensure_ascii=False)
     assert "not built" not in vendor_text and "c1 did not pass" not in vendor_text
-    assert any(g["rule_id"] == "not_built" for g in card["approver"]["gaps"])
+    assert any(g["rule_id"] == "not_checked" and g["internal"] for g in card["approver"]["gaps"])
     assert card["vendor"]["en"]["reviewed"] is True and card["vendor"]["hi"]["reviewed"] is False
     assert card["vendor"]["en"]["missing"] == ["a valid GSTIN (23AKHPK8O71C1ZE does not pass the format check)"]
     assert card["vendor"]["hi"]["missing"] == ["सही GSTIN (23AKHPK8O71C1ZE फ़ॉर्मेट जाँच में सही नहीं निकला)"]
@@ -475,3 +475,22 @@ def test_resume_reuses_the_stored_parse_call(fresh_db, monkeypatch):
         c.execute("UPDATE jobs SET status='running' WHERE job_id=?", (job_id,))
     worker.run_job(job_id)
     assert len(calls) == 1, "the stored Haiku response is reused, never fetched again"
+
+
+@pytest.mark.parametrize("phone", ["987 654 3210", "9876 543 210", "+91 (987) 654-3210", "+91-98765-43210",
+                                   "098765 43210", "(987) 654 3210"])
+def test_scrub_masks_phone_in_any_grouping(phone):
+    t = scrub_request({**load_case(8)["request"], "text": f"call {phone} today, IFSC SBIN0030010"})["text"]
+    assert t == "call [phone] today, IFSC SBIN0030010"
+
+
+@pytest.mark.parametrize("text, want", [
+    ("id 2345-6789-0124 ok", "id [aadhaar removed] ok"),
+    ("id 234567890124 ok", "id [aadhaar removed] ok"),
+    ("A/c 5010 0123 4567 89 ok", "A/c [account ****6789] ok"),
+    ("ref 5010 0123 4567 89 ok", "ref [number ****6789] ok"),
+    ("call +919876543210 ok", "call [phone] ok"),
+    ("call 919876543210 ok", "call [phone] ok"),
+])
+def test_scrub_aadhaar_separators_and_prefixed_phones(text, want):
+    assert scrub_request({**load_case(8)["request"], "text": text})["text"] == want

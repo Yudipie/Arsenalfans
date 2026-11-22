@@ -107,6 +107,210 @@ rules:
     missing_en: "a GSTIN that GST has a record of ({gstin} was not found)"
     missing_hi: "ऐसा GSTIN जिसका GST में रिकॉर्ड हो ({gstin} नहीं मिला)"
 
+  # --- c3 identity ---
+  identity_confirmed:
+    en: "GST confirms the GSTIN {gstin} belongs to {name}."
+    hi: "GST पुष्टि करता है कि GSTIN {gstin} {name} का है।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  identity_pan_level:
+    en: "GST confirms the company {gst_legal_name} for the GSTIN {gstin}, found from the name given."
+    hi: "दिए गए नाम से मिले GSTIN {gstin} के लिए GST कंपनी {gst_legal_name} की पुष्टि करता है।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  identity_unconfirmed:
+    en: "GST did not confirm who holds the GSTIN {gstin}."
+    hi: "GST ने पुष्टि नहीं की कि GSTIN {gstin} किसका है।"
+    contest_en: "Send your GST registration certificate (REG-06)."
+    contest_hi: "अपना GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    ask_en: "Hello, we could not confirm your GST registration ({gstin}). Please send a copy of your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, हम आपके GST पंजीकरण ({gstin}) की पुष्टि नहीं कर सके। कृपया अपने GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी भेजें।"
+    missing_en: "a copy of your GST registration certificate (REG-06)"
+    missing_hi: "आपके GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी"
+  name_mismatch:
+    en: "The name given, {name}, does not match the GST legal name ({gst_legal_name}) or trade name ({gst_trade_name})."
+    hi: "दिया गया नाम {name} GST के कानूनी नाम ({gst_legal_name}) या व्यापार नाम ({gst_trade_name}) से मेल नहीं खाता।"
+    contest_en: "Send your GST registration certificate (REG-06) showing your legal and trade names."
+    contest_hi: "अपना कानूनी और व्यापार नाम दिखाता GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+  several_pans:
+    en: "More than one company with this name holds a GSTIN; we could not tell which one is {name}."
+    hi: "इस नाम की एक से ज़्यादा कंपनियों के पास GSTIN है; हम तय नहीं कर सके कि {name} कौन सी है।"
+    contest_en: "Send your GSTIN and GST registration certificate (REG-06)."
+    contest_hi: "अपना GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+  identify_tie:
+    en: "Several companies match the name {name} equally well; we could not tell which one is yours."
+    hi: "नाम {name} से कई कंपनियाँ बराबर मेल खाती हैं; हम तय नहीं कर सके कि आपकी कौन सी है।"
+    contest_en: "Send your GSTIN and GST registration certificate (REG-06)."
+    contest_hi: "अपना GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+  acquired_or_merged:
+    en: "Records show the company may have been acquired or merged."
+    hi: "रिकॉर्ड बताते हैं कि कंपनी का अधिग्रहण या विलय हुआ हो सकता है।"
+    contest_en: "Send a document showing the company's current ownership, such as the latest MCA filing."
+    contest_hi: "कंपनी का मौजूदा स्वामित्व दिखाने वाला दस्तावेज़ भेजें, जैसे ताज़ा MCA फ़ाइलिंग।"
+  discovery_none:
+    en: "No GST-registered company was found for the name {name}."
+    hi: "नाम {name} के लिए कोई GST-पंजीकृत कंपनी नहीं मिली।"
+    contest_en: "Send your 15-character GSTIN and your GST registration certificate (REG-06)."
+    contest_hi: "अपना 15 अक्षरों का GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+    ask_en: "Hello, we could not find a GST registration for {name}. Please share your 15-character GSTIN and a copy of your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, हमें {name} का GST पंजीकरण नहीं मिला। कृपया अपना 15 अक्षरों का GSTIN और GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी भेजें।"
+    missing_en: "your 15-character GSTIN"
+    missing_hi: "आपका 15 अक्षरों का GSTIN"
+
+  # --- c4 duplicates ---
+  dup_none:
+    en: "No other vendor or earlier request uses this GSTIN or PAN."
+    hi: "कोई दूसरा वेंडर या पिछला अनुरोध इस GSTIN या PAN का उपयोग नहीं करता।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  dup_known_vendor:
+    en: "This GSTIN is already on our vendor list under the same name."
+    hi: "यह GSTIN उसी नाम से हमारी वेंडर सूची में पहले से है।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  dup_branch:
+    en: "The same PAN is on our vendor list under another GSTIN: this is treated as a branch."
+    hi: "यही PAN किसी दूसरे GSTIN के साथ हमारी वेंडर सूची में है: इसे शाखा माना गया है।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  dup_other_name:
+    en: "This GSTIN or PAN is already on our records under a different business name."
+    hi: "यह GSTIN या PAN हमारे रिकॉर्ड में किसी दूसरे व्यवसाय-नाम से पहले से है।"
+    contest_en: "Send your GST registration certificate (REG-06) and a note explaining the other name."
+    contest_hi: "अपना GST पंजीकरण प्रमाणपत्र (REG-06) और दूसरे नाम के बारे में एक नोट भेजें।"
+  bank_changed:
+    en: "This GSTIN is on our records with a different bank account."
+    hi: "यह GSTIN हमारे रिकॉर्ड में किसी दूसरे बैंक खाते के साथ है।"
+    contest_en: "Send a cancelled cheque for the new account and a signed letter confirming the change."
+    contest_hi: "नए खाते का रद्द चेक और बदलाव की पुष्टि करता हस्ताक्षरित पत्र भेजें।"
+
+  # --- c9 bank ---
+  bank_ok:
+    en: "The IFSC is a {ifsc_bank} branch ({ifsc_branch}) and the payee name matches the GST name."
+    hi: "IFSC {ifsc_bank} की शाखा ({ifsc_branch}) है और प्राप्तकर्ता का नाम GST नाम से मेल खाता है।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  bank_not_given:
+    en: "No bank details were given; they must be checked before the first payment."
+    hi: "बैंक विवरण नहीं दिए गए; पहले भुगतान से पहले इनकी जाँच ज़रूरी है।"
+    contest_en: "Send a cancelled cheque or bank letter showing the account, IFSC and payee name."
+    contest_hi: "खाता, IFSC और प्राप्तकर्ता का नाम दिखाता रद्द चेक या बैंक पत्र भेजें।"
+  ifsc_missing:
+    en: "Bank details were given without an IFSC."
+    hi: "बैंक विवरण बिना IFSC के दिए गए।"
+    contest_en: "Send a cancelled cheque showing the IFSC."
+    contest_hi: "IFSC दिखाता रद्द चेक भेजें।"
+    ask_en: "Hello, please share the IFSC of your bank branch, or a cancelled cheque showing it."
+    ask_hi: "नमस्ते, कृपया अपनी बैंक शाखा का IFSC, या उसे दिखाता रद्द चेक भेजें।"
+    missing_en: "your bank branch's IFSC"
+    missing_hi: "आपकी बैंक शाखा का IFSC"
+  ifsc_not_found:
+    en: "The IFSC given was not found in the bank directory."
+    hi: "दिया गया IFSC बैंक निर्देशिका में नहीं मिला।"
+    contest_en: "Send a cancelled cheque showing the IFSC."
+    contest_hi: "IFSC दिखाता रद्द चेक भेजें।"
+    ask_en: "Hello, the IFSC you shared was not found. Please recheck it and send a cancelled cheque showing it."
+    ask_hi: "नमस्ते, आपका दिया IFSC नहीं मिला। कृपया इसे दोबारा जाँचें और उसे दिखाता रद्द चेक भेजें।"
+    missing_en: "a valid IFSC"
+    missing_hi: "सही IFSC"
+  payee_missing:
+    en: "The payee name on the bank account was not given."
+    hi: "बैंक खाते पर प्राप्तकर्ता का नाम नहीं दिया गया।"
+    contest_en: "Send a cancelled cheque showing the payee name."
+    contest_hi: "प्राप्तकर्ता का नाम दिखाता रद्द चेक भेजें।"
+    ask_en: "Hello, please share the account holder's name as it appears on your bank account, or a cancelled cheque showing it."
+    ask_hi: "नमस्ते, कृपया बैंक खाते पर लिखा खाताधारक का नाम, या उसे दिखाता रद्द चेक भेजें।"
+    missing_en: "the payee name on your bank account"
+    missing_hi: "आपके बैंक खाते पर प्राप्तकर्ता का नाम"
+  payee_mismatch:
+    en: "The payee name does not match the GST legal name ({gst_legal_name}) or trade name ({gst_trade_name})."
+    hi: "प्राप्तकर्ता का नाम GST के कानूनी नाम ({gst_legal_name}) या व्यापार नाम ({gst_trade_name}) से मेल नहीं खाता।"
+    contest_en: "Send a cancelled cheque from an account in the business's GST name."
+    contest_hi: "व्यवसाय के GST नाम वाले खाते का रद्द चेक भेजें।"
+
+  # --- c5 activity (optional: Refer or a gap, never a block) ---
+  active:
+    en: "The company shows recent activity (news, open roles or a live website)."
+    hi: "कंपनी में हाल की गतिविधि दिखती है (ख़बरें, खुली नौकरियाँ या चालू वेबसाइट)।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  dormant:
+    en: "The company looks dormant: status {crustdata_status}, or its website {site_url} is down."
+    hi: "कंपनी निष्क्रिय लगती है: स्थिति {crustdata_status}, या इसकी वेबसाइट {site_url} बंद है।"
+    contest_en: "Send recent invoices or e-way bills showing the business is operating."
+    contest_hi: "व्यवसाय चालू होने का प्रमाण देते हाल के इनवॉइस या ई-वे बिल भेजें।"
+  no_recent_activity:
+    internal: true                 # optional signal; approver card only
+    en: "No recent activity found: {gap}."
+    hi: "हाल की कोई गतिविधि नहीं मिली: {gap}।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+    ask_en: "Hello, please share a recent invoice or e-way bill so we can confirm your business is operating."
+    ask_hi: "नमस्ते, कृपया हाल का कोई इनवॉइस या ई-वे बिल भेजें ताकि हम पुष्टि कर सकें कि आपका व्यवसाय चालू है।"
+  no_activity_data:
+    internal: true                 # optional signal; approver card only
+    en: "Activity was not checked: {gap}."
+    hi: "गतिविधि की जाँच नहीं हुई: {gap}।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+    ask_en: "Hello, please share a recent invoice or e-way bill so we can confirm your business is operating."
+    ask_hi: "नमस्ते, कृपया हाल का कोई इनवॉइस या ई-वे बिल भेजें ताकि हम पुष्टि कर सकें कि आपका व्यवसाय चालू है।"
+
+  # --- c6 age and address (optional) ---
+  age_address_ok:
+    en: "GST registered the business on {gst_registered_on} in {gst_state}."
+    hi: "GST ने व्यवसाय को {gst_registered_on} को {gst_state} में पंजीकृत किया।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  gst_too_new:
+    en: "The GST registration is recent: {gst_registered_on}."
+    hi: "GST पंजीकरण हाल का है: {gst_registered_on}।"
+    contest_en: "Send proof of earlier trading, such as older invoices or a previous registration."
+    contest_hi: "पहले के कारोबार का प्रमाण भेजें, जैसे पुराने इनवॉइस या पिछला पंजीकरण।"
+  state_mismatch:
+    en: "GST lists the business in {gst_state}, not the state given."
+    hi: "GST व्यवसाय को {gst_state} में दिखाता है, दिए गए राज्य में नहीं।"
+    contest_en: "Send your GST registration certificate (REG-06) for the state you operate from."
+    contest_hi: "जिस राज्य से आप काम करते हैं उसका GST पंजीकरण प्रमाणपत्र (REG-06) भेजें।"
+  domain_too_new:
+    en: "The company's website domain was registered recently: {rdap_registered_on}."
+    hi: "कंपनी की वेबसाइट का डोमेन हाल ही में पंजीकृत हुआ: {rdap_registered_on}।"
+    contest_en: "Send proof of earlier trading, such as older invoices."
+    contest_hi: "पहले के कारोबार का प्रमाण भेजें, जैसे पुराने इनवॉइस।"
+  gst_date_missing:
+    internal: true                 # a gap in the source record; approver card only
+    en: "The GST registration date is not in the record."
+    hi: "GST पंजीकरण की तारीख़ रिकॉर्ड में नहीं है।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+    ask_en: "Hello, please send a copy of your GST registration certificate (REG-06)."
+    ask_hi: "नमस्ते, कृपया अपने GST पंजीकरण प्रमाणपत्र (REG-06) की कॉपी भेजें।"
+
+  # --- c7 people and news (optional) ---
+  people_not_given:
+    en: "Directors were not given, so people and news were not checked."
+    hi: "निदेशकों के नाम नहीं दिए गए, इसलिए लोगों और ख़बरों की जाँच नहीं हुई।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  people_clear:
+    en: "No adverse news was found about the directors."
+    hi: "निदेशकों के बारे में कोई प्रतिकूल ख़बर नहीं मिली।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+  people_adverse:
+    en: "A news report appears to concern one of the directors."
+    hi: "एक ख़बर किसी निदेशक के बारे में लगती है।"
+    contest_en: "Send any court or police document that settles the matter, or explain why the report is about someone else."
+    contest_hi: "मामला सुलझाने वाला कोई अदालती या पुलिस दस्तावेज़ भेजें, या बताएँ कि ख़बर किसी और के बारे में क्यों है।"
+  people_one_anchor:
+    internal: true                 # a possible namesake; the approver checks by hand
+    en: "A news item may be about a director (one matching detail); check by hand."
+    hi: "एक ख़बर किसी निदेशक के बारे में हो सकती है (एक विवरण मेल खाता है); हाथ से जाँचें।"
+    contest_en: "Nothing to send."
+    contest_hi: "कुछ भेजने की ज़रूरत नहीं।"
+    ask_en: "Hello, your onboarding needs a manual review step; no action is needed from you yet."
+    ask_hi: "नमस्ते, आपकी ऑनबोर्डिंग में एक मैनुअल समीक्षा बाकी है; अभी आपको कुछ करने की ज़रूरत नहीं।"
+
   # --- not a finding about the carrier ---
   source_unavailable:
     en: "The source for this check did not answer: {gap}."

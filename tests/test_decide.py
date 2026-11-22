@@ -3,6 +3,7 @@
 The test_phase0_gate_* tests stay red until phase 0 is really done; each names what is missing.
 """
 import json
+import time
 
 import pytest
 
@@ -292,10 +293,13 @@ def test_approve_twice_gives_one_row_and_edit_voids_it(db):
 
 
 def test_stored_mock_call_is_not_reused_with_mock_off(db, monkeypatch):
-    run_case(2)
+    job_id, _ = run_case(2)
+    [before] = [c for c in store.job_calls(job_id) if c["provider"] == "fixture"]  # the GST call
     monkeypatch.setenv("MOCK", "0")
     with pytest.raises(sources.SourceUnavailable):
         sources.call("j", ["fixture"], {"gstin": load_case(2)["request"]["fields"]["gstin"]}, sources.GST_PROVIDERS)
+    # The live attempt is keyed apart: job A's mock row (and the evidence citing it) is untouched.
+    assert store.call_by_id(before["call_id"]) == {k: v for k, v in before.items() if k != "reused"}
 
 
 def test_edit_refused_unless_finished(db):
@@ -315,21 +319,51 @@ def test_edit_and_resume_restart_the_time_limit(db):
     assert store.job(job_id)["started_at"] is None and store.job(job_id)["resumes"] == "[]"
     worker.run_job(job_id)
     assert store.latest_verdict(job_id)["checks"][1]["result"] == "pass"
-    # A resume after a long kill: started_at is reset, so gather still runs.
+    # A resume after a long kill: the time limit restarts from the resume, so gather still runs.
     with store.tx() as c:
-        c.execute("UPDATE jobs SET status='running', started_at=0 WHERE job_id=?", (job_id,))
+        c.execute("UPDATE jobs SET status='running', started_at=? WHERE job_id=?", (time.time() - 3600, job_id))
         c.execute("DELETE FROM steps WHERE job_id=? AND name IN ('gather','checks','decide','output')", (job_id,))
         c.execute("DELETE FROM evidence WHERE job_id=?", (job_id,))
     worker.run_job(job_id)
     assert store.latest_verdict(job_id)["checks"][1]["result"] == "pass"
+    # elapsed_s still runs from the first start, not from the resume.
+    assert store.latest_verdict(job_id)["output"]["elapsed_s"] >= 3600
 
 
 def test_rules_change_voids_the_approval_hash(db, monkeypatch):
+    from fastapi import HTTPException
     from cc import app
     job_id, _ = run_case(2)
     assert app._current_hash(job_id) == current_hash(job_id)
+    ev = store.evidence(job_id)
     monkeypatch.setattr(app, "rules_hash", lambda: "changed")
+    monkeypatch.setattr(worker, "rules_hash", lambda: "changed")
     assert app._current_hash(job_id) is None
+    assert app.get_job(job_id)["rules_stale"] is True
+    with pytest.raises(HTTPException, match="rules changed"):
+        app.approve(job_id, app.Approve(approval_hash="x"))
+    # Re-decide keeps the evidence and re-runs only checks, decide and output.
+    out = app.redecide_job(job_id)
+    assert store.job(job_id)["status"] == "awaiting_approval" and store.evidence(job_id) == ev
+    assert app.get_job(job_id)["rules_stale"] is False and app._current_hash(job_id) == out["approval_hash"]
+
+
+def test_rules_a_then_b_then_a_again_can_be_approved_again(db, monkeypatch):
+    """Redecide back to rules A brings back the voided hash A; approving it must leave a live row."""
+    from cc import app
+    job_id, _ = run_case(4)
+    h = app._current_hash(job_id)
+    app.approve(job_id, app.Approve(approval_hash=h, approved_by="a"))
+    real = worker.rules_hash
+    for mod in (app, worker):
+        monkeypatch.setattr(mod, "rules_hash", lambda: "rules-b")
+    assert app.redecide_job(job_id)["approval_hash"] != h
+    assert [a["void"] for a in store.approvals(job_id)] == [1]
+    for mod in (app, worker):
+        monkeypatch.setattr(mod, "rules_hash", real)
+    assert app.redecide_job(job_id)["approval_hash"] == h
+    app.approve(job_id, app.Approve(approval_hash=h, approved_by="b"))
+    assert [(a["void"], a["approved_by"]) for a in store.approvals(job_id)] == [(0, "b")]
 
 
 def test_a_failing_job_is_parked_and_the_queue_moves_on(db, monkeypatch):
@@ -347,6 +381,56 @@ def test_a_failing_job_is_parked_and_the_queue_moves_on(db, monkeypatch):
         worker.main()
     assert store.job(bad)["status"] == "error"
     assert store.job(good)["status"] == "awaiting_approval"
+
+
+def test_a_job_that_retries_an_errored_call_owns_it(db, monkeypatch):
+    real = sources.GST_PROVIDERS["fixture"]
+    monkeypatch.setitem(sources.GST_PROVIDERS, "fixture", lambda **_: 1 / 0)
+    run_case(2)
+    monkeypatch.setitem(sources.GST_PROVIDERS, "fixture", real)
+    b = worker.submit({**load_case(2)["request"], "client_id": "other-client"})
+    worker.run_job(b)
+    [call] = [c for c in store.job_calls(b) if c["provider"] == "fixture"]  # the GST call
+    assert call["status"] == "done" and not call["reused"] and call["job_id"] == b
+
+
+def test_a_locked_database_crashes_the_worker_instead_of_parking_the_job(db, monkeypatch):
+    import sqlite3
+    job_id = worker.submit(load_case(2)["request"])
+
+    def locked(_):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(worker, "run_job", locked)
+    with pytest.raises(sqlite3.OperationalError):
+        worker.main()
+    assert store.job(job_id)["status"] == "queued"
+
+
+def test_a_permanent_database_error_parks_the_job(db, monkeypatch):
+    import sqlite3
+    job_id = worker.submit(load_case(2)["request"])
+
+    def broken(_):
+        raise sqlite3.OperationalError("no such column: x")
+    monkeypatch.setattr(worker, "run_job", broken)
+
+    def idle(s):
+        if s == 0.2:
+            raise SystemExit
+    monkeypatch.setattr(worker.time, "sleep", idle)
+    with pytest.raises(SystemExit):
+        worker.main()
+    assert store.job(job_id)["status"] == "error"
+
+
+def test_requests_differing_only_in_masked_numbers_get_separate_jobs(db):
+    base = load_case(8)["request"]
+    a = worker.submit({**base, "text": "call 98765 43210"})
+    b = worker.submit({**base, "text": "call 91234 56789"})
+    assert a != b
+    assert worker.submit({**base, "text": "call 98765 43210"}) == a
+    for j in (a, b):
+        assert "98765" not in store.job(j)["request"] and "91234" not in store.job(j)["request"]
 
 
 def test_reused_call_costs_this_job_nothing(db):
@@ -759,7 +843,9 @@ def test_cost_cap_turns_remaining_checks_into_cannot_verify(db, monkeypatch):
     job_id, v = run_case(2)
     c2 = next(c for c in v["checks"] if c["check"] == "c2")
     assert (c2["result"], c2["rule_id"]) == ("cannot_verify", "over_cost_cap")
-    assert v["verdict"] == "Cannot verify" and store.job_calls(job_id) == []
+    # No paid call went out; only free, credit-priced ones (Crustdata identify) may run.
+    assert v["verdict"] == "Cannot verify" and [c for c in store.job_calls(job_id) if c["cost_inr"]] == []
+    assert all(c["provider"] != "fixture" for c in store.job_calls(job_id))
 
 
 @pytest.mark.phase4b
